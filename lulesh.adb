@@ -195,9 +195,9 @@ package body LULESH is
      (Object => Real_t_Array,
       Name   => Real_t_Array_Access);
 
---- /******************************************/
+   --- /******************************************/
 
---- /* Work Routines */
+   --- /* Work Routines */
 
    --x static inline
    --x void TimeIncrement(Domain& domain)
@@ -208,57 +208,95 @@ package body LULESH is
       --x    Real_t targetdt = domain.stoptime() - domain.time() ;
       targetdt := domain.stoptime - domain.time;
 
-      --    if ((domain.dtfixed() <= Real_t(0.0)) && (domain.cycle() != Int_t(0))) {
-      --       Real_t ratio ;
-      --       Real_t olddt = domain.deltatime() ;
+      --x    if ((domain.dtfixed() <= Real_t(0.0)) && (domain.cycle() != Int_t(0))) {
+      if domain.dtfixed <= 0.0 and domain.cycle /= 0 then
+         --x       Real_t ratio ;
+         --x       Real_t olddt = domain.deltatime() ;
 
-      --       /* This will require a reduction in parallel */
-      --       Real_t gnewdt = Real_t(1.0e+20) ;
-      --       Real_t newdt ;
-      --       if (domain.dtcourant() < gnewdt) {
-      --          gnewdt = domain.dtcourant() / Real_t(2.0) ;
-      --       }
-      --       if (domain.dthydro() < gnewdt) {
-      --          gnewdt = domain.dthydro() * Real_t(2.0) / Real_t(3.0) ;
-      --       }
+         ---       /* This will require a reduction in parallel */
+         --x       Real_t gnewdt = Real_t(1.0e+20) ;
+         --x       Real_t newdt ;
+         declare
+            ratio  : Real_t;
+            olddt  : Real_t := domain.deltatime;
+            gnewdt : Real_t := 1.0e+20;
+            newdt  : Real_t;
 
-      -- #if USE_MPI
-      --       MPI_Allreduce(&gnewdt, &newdt, 1,
-      --                     ((sizeof(Real_t) == 4) ? MPI_FLOAT : MPI_DOUBLE),
-      --                     MPI_MIN, MPI_COMM_WORLD) ;
-      -- #else
-      --       newdt = gnewdt;
-      -- #endif
+         begin
+            --x       if (domain.dtcourant() < gnewdt) {
+            --x          gnewdt = domain.dtcourant() / Real_t(2.0) ;
+            --x       }
+            --x       if (domain.dthydro() < gnewdt) {
+            --x          gnewdt = domain.dthydro() * Real_t(2.0) / Real_t(3.0) ;
+            --x       }
+            if domain.dtcourant < gnewdt then
+               gnewdt := domain.dtcourant / 2.0;
+            end if;
+            if domain.dthydro < gnewdt then
+               gnewdt := domain.dthydro * 2.0 / 3.0;
+            end if;
 
-      --       ratio = newdt / olddt ;
-      --       if (ratio >= Real_t(1.0)) {
-      --          if (ratio < domain.deltatimemultlb()) {
-      --             newdt = olddt ;
-      --          }
-      --          else if (ratio > domain.deltatimemultub()) {
-      --             newdt = olddt*domain.deltatimemultub() ;
-      --          }
-      --       }
+            -- #if USE_MPI
+            --       MPI_Allreduce(&gnewdt, &newdt, 1,
+            --                     ((sizeof(Real_t) == 4) ? MPI_FLOAT : MPI_DOUBLE),
+            --                     MPI_MIN, MPI_COMM_WORLD) ;
+            -- #else
+            --x       newdt = gnewdt;
+            -- #endif
+            newdt := gnewdt;
 
-      --       if (newdt > domain.dtmax()) {
-      --          newdt = domain.dtmax() ;
-      --       }
-      --       domain.deltatime() = newdt ;
-      --    }
+            --x       ratio = newdt / olddt ;
+            --x       if (ratio >= Real_t(1.0)) {
+            --x          if (ratio < domain.deltatimemultlb()) {
+            --x             newdt = olddt ;
+            --x          }
+            --x          else if (ratio > domain.deltatimemultub()) {
+            --x             newdt = olddt*domain.deltatimemultub() ;
+            --x          }
+            --x       }
+            ratio := newdt / olddt;
+            if ratio >= 1.0 then
+               if ratio < domain.deltatimemultlb then
+                  newdt := olddt;
+               elsif ratio > domain.deltatimemultub then
+                  newdt := olddt * domain.deltatimemultub;
+               end if;
 
-      --    /* TRY TO PREVENT VERY SMALL SCALING ON THE NEXT CYCLE */
-      --    if ((targetdt > domain.deltatime()) &&
-      --        (targetdt < (Real_t(4.0) * domain.deltatime() / Real_t(3.0))) ) {
-      --       targetdt = Real_t(2.0) * domain.deltatime() / Real_t(3.0) ;
-      --    }
+               --x       if (newdt > domain.dtmax()) {
+               --x          newdt = domain.dtmax() ;
+               --x       }
+               --x       domain.deltatime() = newdt ;
+               if newdt > domain.dtmax then
+                  newdt := domain.dtmax;
+               end if;
+               domain.deltatime := newdt;
+            end if;
+         end;
+         --x    }
+      end if;
 
-      --    if (targetdt < domain.deltatime()) {
-      --       domain.deltatime() = targetdt ;
-      --    }
+         ---    /* TRY TO PREVENT VERY SMALL SCALING ON THE NEXT CYCLE */
+         --x    if ((targetdt > domain.deltatime()) &&
+         --x        (targetdt < (Real_t(4.0) * domain.deltatime() / Real_t(3.0))) ) {
+         --x       targetdt = Real_t(2.0) * domain.deltatime() / Real_t(3.0) ;
+         --x    }
+         if targetdt > domain.deltatime and
+           targetdt < (4.0 * domain.deltatime / 3.0) then
+            targetdt := 2.0 * domain.deltatime / 3.0;
+         end if;
 
-      --    domain.time() += domain.deltatime() ;
+      --x    if (targetdt < domain.deltatime()) {
+      --x       domain.deltatime() = targetdt ;
+      --x    }
+        if targetdt < domain.deltatime then
+           domain.deltatime := targetdt;
+        end if;
 
-      --    ++domain.cycle() ;
+      --x    domain.time() += domain.deltatime() ;
+        domain.time := domain.time + domain.deltatime;
+
+      --x    ++domain.cycle() ;
+      domain.cycle := domain.cycle + 1;
       --x }
    end TimeIncrement;
 
@@ -652,10 +690,10 @@ begin
             --x     Real_t x_local[8] ;
             --x     Real_t y_local[8] ;
             --x     Real_t z_local[8] ;
-            B       : array (0..2, 0..7) of Real_t;
-            x_local : array (0..7) of Real_t;
-            y_local : array (0..7) of Real_t;
-            z_local : array (0..7) of Real_t;
+            B       : array (0..2) of Real_t_Array_8;
+            x_local : Real_t_Array_8;
+            y_local : Real_t_Array_8;
+            z_local : Real_t_Array_8;
          begin
             ---     // get nodal coordinates from global arrays and copy into local arrays.
             --x     CollectDomainNodesToElemNodes(domain, elemToNode, x_local, y_local, z_local);
