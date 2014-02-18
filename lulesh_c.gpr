@@ -1,23 +1,19 @@
 project LULESH_C is
 
-   for Languages use ("C", "C++");
+   for Languages use ("C++");
    for Object_Dir use "obj_c";
    for Main use ("lulesh.cc");
 
    package Naming is
-      for Spec_Suffix ("c") use ".h";
-      for Body_Suffix ("c") use ".c";
       for Spec_Suffix ("c++") use ".h";
       for Body_Suffix ("c++") use ".cc";
    end Naming;
 
    package Compiler is
-      for Default_Switches ("c") use ("-g", "-fdump-xref", "-DUSE_MPI=0");
-      for Default_Switches ("c++") use ("-g", "-fdump-xref");
+      for Default_Switches ("c++") use ("-g", "-fdump-xref", "-DUSE_MPI=0");
    end Compiler;
 
    package Linker is
-      for Default_Switches ("c") use ("-g");
       for Default_Switches ("c++") use ("-g");
    end Linker;
 

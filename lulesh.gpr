@@ -4,7 +4,7 @@ project LULESH is
 
    for Languages use ("Ada");
    for Object_Dir use "obj";
-   for Main use ("lulesh");
+   for Main use ("LULESH-Main.adb");
 
    package Compiler is
       for Default_Switches ("ada") use ("-gnato", "-fstack-check", "-gnata", "-g", "-gnat12");
