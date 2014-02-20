@@ -66,9 +66,9 @@ package LULESH is
 
    type Index_t_Array is array (Index_t range <>) of Index_t;
 
-   type Dimensions is (X, Y, Z);
-   subtype XYZ_Type is Dimensions;
-   subtype Coord_Names is Dimensions;
+   type XYZ_Names is (X, Y, Z);
+   subtype Dimensions is XYZ_Names;
+   subtype Coordinate_Names is XYZ_Names;
 
    type XEZ_Type is (Xi, Eta, Zeta);
    Et : constant XEZ_Type := Eta;
@@ -77,38 +77,55 @@ package LULESH is
    subtype Elem_Node_Range is Index_t range 0..7;
    subtype Face_Node_Range is Index_t range 0..3;
    subtype Bisect_Range is Index_t range 0..1;
-   subtype Face_Range is Index_t range 1..6;
+   subtype Face_Range is Index_t range 0..5;
 
    subtype Elem_Node_Index_Array is Index_t_Array (Elem_Node_Range);
-   subtype Elem_Node_Value_Array is Real_t_Array (Elem_Node_Range);
-   subtype Face_Node_Value_Array is Real_t_Array (Face_Node_Range);
-   type Coord_Value_Array is array (Coord_Names) of Real_t;
+   subtype Elem_Node_Real_Array is Real_t_Array (Elem_Node_Range);
+   subtype Face_Node_Real_Array is Real_t_Array (Face_Node_Range);
+   type XYZ_Real_Array is array (XYZ_Names) of Real_t;
 
-   type Coord_Elem_Node_Value_Array is array
-     (Coord_Names, Elem_Node_Range) of Real_t;
-   type Elem_Node_Coord_Value_Array is array
-     (Elem_Node_Range, Coord_Names) of Real_t;
-   type Elem_Node_Coord_Value_Array_Array is array
-     (Elem_Node_Range) of Coord_Value_Array;
+   type XYZ_Elem_Node_Real_Array is array
+     (XYZ_Names, Elem_Node_Range) of Real_t;
+   type Elem_Node_XYZ_Real_Array is array
+     (Elem_Node_Range, XYZ_Names) of Real_t;
+   type Elem_Node_XYZ_Real_Array_Array is array
+     (Elem_Node_Range) of XYZ_Real_Array;
 
-   type Coord_Face_Node_Value_Array is array
-     (Coord_Names, Face_Node_Range) of Real_t;
-   type Coord_Face_Node_Value_Array_Array is array
-     (Coord_Names) of Face_Node_Value_Array;
-   type Face_Node_Coord_Value_Array is array
-     (Face_Node_Range, Coord_Names) of Real_t;
-   type Face_Node_Coord_Value_Array_Array is array
-     (Face_Node_Range) of Coord_Value_Array;
+   type XYZ_Face_Node_Real_Array is array
+     (XYZ_Names, Face_Node_Range) of Real_t;
+   type XYZ_Face_Node_Real_Array_Array is array
+     (XYZ_Names) of Face_Node_Real_Array;
+   type Face_XYZ_Real_Array_Array is array
+     (Face_Range) of XYZ_Real_Array;
+   type Face_Node_XYZ_Real_Array is array
+     (Face_Node_Range, XYZ_Names) of Real_t;
+   type Face_Node_XYZ_Real_Array_Array is array
+     (Face_Node_Range) of XYZ_Real_Array;
 
-   type Coord_XEZ_Value_Array is array
-     (Coord_Names, XEZ_Type) of Real_t;
+   type XYZ_XEZ_Real_Array is array
+     (XYZ_Names, XEZ_Type) of Real_t;
 
-   type Bisect_Coord_Value_Array is array
-     (Bisect_Range, Coord_Names) of Real_t;
-   subtype Area_Array is Coord_Value_Array;
+   type Bisect_XYZ_Real_Array is array
+     (Bisect_Range, XYZ_Names) of Real_t;
+   subtype Area_Array is XYZ_Real_Array;
 
    type Face_Face_Node_Elem_Node_Array is array
      (Face_Range, Face_Node_Range) of Elem_Node_Range;
+
+   type Real_t_Vector is
+     array (Index_t range <>) of Real_t;
+
+   type Int_t_Vector is
+     array (Index_t range <>) of Int_t;
+
+   type Index_t_Vector is
+     array (Index_t range <>) of Index_t;
+
+   type Elem_Node_Index_Array_Vector is
+     array (Index_t range <>) of Elem_Node_Index_Array;
+
+   type XYZ_Real_Array_Vector is
+     array (Index_t range <>) of XYZ_Real_Array;
 
    ---------------------------------------
 
@@ -246,7 +263,7 @@ package LULESH is
    -- class Domain {
    type Domain_Record
      (numNode : Index_t;
-      numElem : Index_t) is tagged private;
+      numElem : Index_t) is private;
    type Access_Domain is access Domain_Record;
 
    --    public:
@@ -539,68 +556,35 @@ package LULESH is
    --x   private:
 private
 
-   subtype C_STL_Vector_Index_Type is Natural;
-
---     package Real_t_Vectors is new Ada.Containers.Vectors
---       (Index_Type   => C_STL_Vector_Index_Type,
---        Element_Type => Real_t);
---     -- To make operations directly visible:
---     type Real_t_Vector is new Real_t_Vectors.Vector with null record;
-   type Real_t_Vector is
-     array (Index_t range <>) of Real_t;
-
-   package Int_t_Vectors is new Ada.Containers.Vectors
-     (Index_Type   => C_STL_Vector_Index_Type,
-      Element_Type => Int_t);
-   subtype Int_t_Vector is Int_t_Vectors.Vector;
-
-   package Index_t_Vectors is new Ada.Containers.Vectors
-     (Index_Type   => C_STL_Vector_Index_Type,
-      Element_Type => Index_t);
-   subtype Index_t_Vector is Index_t_Vectors.Vector;
-
-   type Elem_Node_Index_Array_Vector is
-     array (Index_t range <>) of Elem_Node_Index_Array;
-
-   type Coord_Value_Array_Vector is
-     array (Index_t range <>) of Coord_Value_Array;
+   type Node_Centered_Record is record
+      end record;
 
    ---    //
    ---    // IMPLEMENTATION
    ---    //
    type Domain_Record
      (numNode : Index_t;
-      numElem : Index_t) is tagged record
-      ---    /* Node-centered */
+      numElem : Index_t) is record
+
       --x    std::vector<Real_t> m_x ;  /* coordinates */
       --x    std::vector<Real_t> m_y ;
       --x    std::vector<Real_t> m_z ;
-      coords : Coord_Value_Array_Vector (1..numNode);
-
---        x : Real_t_Vector (1..numNode);
---        y : Real_t_Vector (1..numNode);
---        z : Real_t_Vector (1..numNode);
+      coordinates : XYZ_Real_Array_Vector (1..numNode);
 
       --x    std::vector<Real_t> m_xd ; /* velocities */
       --x    std::vector<Real_t> m_yd ;
       --x    std::vector<Real_t> m_zd ;
-      xd : Real_t_Vector (1..numNode);
-      yd : Real_t_Vector (1..numNode);
-      zd : Real_t_Vector (1..numNode);
+      velocities : XYZ_Real_Array_Vector (1..numNode);
 
       --x    std::vector<Real_t> m_xdd ; /* accelerations */
       --x    std::vector<Real_t> m_ydd ;
       --x    std::vector<Real_t> m_zdd ;
-      xdd : Real_t_Vector (1..numNode);
-      ydd : Real_t_Vector (1..numNode);
-      zdd : Real_t_Vector (1..numNode);
+      acceleration : XYZ_Real_Array_Vector (1..numNode);
 
       --x    std::vector<Real_t> m_fx ;  /* forces */
       --x    std::vector<Real_t> m_fy ;
       --x    std::vector<Real_t> m_fz ;
-      fx : Real_t_Vector (1..numNode);
-      fy : Real_t_Vector (1..numNode);
-      fz : Real_t_Vector (1..numNode);
+      force : XYZ_Real_Array_Vector (1..numNode);
 
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
       nodalMass : Real_t_Vector (1..numNode);
@@ -615,6 +599,7 @@ private
       ---    // Element-centered
 
       ---    // Region information
+
       --x    Int_t    m_numReg ;
       --x    Int_t    m_cost; //imbalance cost
    --    Index_t *m_regElemSize ;   // Size of region sets
@@ -624,7 +609,7 @@ private
       cost   : Int_t;
 
       --x    std::vector<Index_t>  m_nodelist ;     /* elemToNode connectivity */
-      nodelist : Elem_Node_Index_Array_Vector (0..numElem);
+      elem_nodes : Elem_Node_Index_Array_Vector (0..numElem);
 
       --x    std::vector<Index_t>  m_lxim ;  /* element connectivity across each face */
       --x    std::vector<Index_t>  m_lxip ;
@@ -632,65 +617,56 @@ private
       --x    std::vector<Index_t>  m_letap ;
       --x    std::vector<Index_t>  m_lzetam ;
       --x    std::vector<Index_t>  m_lzetap ;
-      lxim   : Index_t_Vector;
-      lxip   : Index_t_Vector;
-      letam  : Index_t_Vector;
-      letap  : Index_t_Vector;
-      lzetam : Index_t_Vector;
-      lzetap : Index_t_Vector;
+      --! Or should this be XEZ_Face_Index_Array_Vector?
+--        connectivity_m : XEZ_Real_Array_Vector (1..numNode);
+--        connectivity_p : XEZ_Real_Array_Vector (1..numNode);
 
       --x    std::vector<Int_t>    m_elemBC ;  /* symmetry/free-surface flags for each elem face */
-      elemBC : Int_t_Vector;
+      elemBC : Face_Int_t_Array_Vector (0..numelem);
 
       --x    std::vector<Real_t> m_dxx ;  /* principal strains -- temporary */
       --x    std::vector<Real_t> m_dyy ;
       --x    std::vector<Real_t> m_dzz ;
-      dxx : Real_t_Vector (0..numElem);
-      dyy : Real_t_Vector (0..numElem);
-      dzz : Real_t_Vector (0..numElem);
+      principal_strain : XYZ_Real_Array_Vector (0..numElem);
 
       --x    std::vector<Real_t> m_delv_xi ;    /* velocity gradient -- temporary */
       --x    std::vector<Real_t> m_delv_eta ;
       --x    std::vector<Real_t> m_delv_zeta ;
-      delv_xi   : Real_t_Vector (0..numElem);
-      delv_eta  : Real_t_Vector (0..numElem);
-      delv_zeta : Real_t_Vector (0..numElem);
+      velocity_gradient : XEZ_Real_Array_Vector (0..numElem);
 
       --x    std::vector<Real_t> m_delx_xi ;    /* coordinate gradient -- temporary */
       --x    std::vector<Real_t> m_delx_eta ;
       --x    std::vector<Real_t> m_delx_zeta ;
-      delx_xi   : Real_t_Vector (0..numElem);
-      delx_eta  : Real_t_Vector (0..numElem);
-      delx_zeta : Real_t_Vector (0..numElem);
+      coordinate_gradient : XEZ_Real_Array_Vector (0..numElem);
 
       --x    std::vector<Real_t> m_e ;   /* energy */
-      e : Real_t;
+      energy : Real_t;
 
       --x    std::vector<Real_t> m_p ;   /* pressure */
       --x    std::vector<Real_t> m_q ;   /* q */
       --x    std::vector<Real_t> m_ql ;  /* linear term for q */
       --x    std::vector<Real_t> m_qq ;  /* quadratic term for q */
-      p  : Real_t_Vector (0..numElem);
-      q  : Real_t_Vector (0..numElem);
-      ql : Real_t_Vector (0..numElem);
-      qq : Real_t_Vector (0..numElem);
+      pressure    : Real_t_Vector (0..numElem);
+      q           : Real_t_Vector (0..numElem);
+      q_linear    : Real_t_Vector (0..numElem);
+      q_quadratic : Real_t_Vector (0..numElem);
 
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
       --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
       --x    std::vector<Real_t> m_delv ;  /* m_vnew - m_v */
       --x    std::vector<Real_t> m_vdov ;  /* volume derivative over volume */
-      v    : Real_t_Vector (0..numElem);
-      volo : Real_t_Vector (0..numElem);
-      vnew : Real_t_Vector (0..numElem);
-      delv : Real_t_Vector (0..numElem);
-      vdov : Real_t_Vector (0..numElem);
+      relative_volume               : Real_t_Vector (0..numElem);
+      reference_volume              : Real_t_Vector (0..numElem);
+      new_relative_volume           : Real_t_Vector (0..numElem);
+      relative_volume_change        : Real_t_Vector (0..numElem);
+      volume_derivative_over_volume : Real_t_Vector (0..numElem);
 
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
-      arealg : Real_t_Vector (0..numElem);
+      characteristic_length : Real_t_Vector (0..numElem);
 
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
-      ss : Real_t_Vector (0..numElem);
+      sound_speed : Real_t_Vector (0..numElem);
 
       --x    std::vector<Real_t> m_elemMass ;  /* mass */
       elemMass : Real_t_Vector (0..numElem);
@@ -701,11 +677,11 @@ private
       ---    const Real_t  m_q_cut ;             // q tolerance
       ---    const Real_t  m_v_cut ;             // relative volume tolerance
       ---    const Real_t  m_u_cut ;             // velocity tolerance
-      e_cut : Real_t;
-      p_cut : Real_t;
-      q_cut : Real_t;
-      v_cut : Real_t;
-      u_cut : Real_t;
+      energy_tolerance          : Real_t;
+      pressure_tolerance        : Real_t;
+      q_tolerance               : Real_t;
+      relative_volume_tolerance : Real_t;
+      velocity_tolerance        : Real_t;
 
       ---    // Other constants (usually setable, but hardcoded in this proxy app)
 
@@ -776,9 +752,7 @@ private
       --x    Index_t m_sizeZ ;
       --x    Index_t m_numElem ;
       --x    Index_t m_numNode ;
-      sizeX   : Index_t;
-      sizeY   : Index_t;
-      sizeZ   : Index_t;
+      size : XYZ_Index_Array;
       -- Moved to discriminant:
 --        numElem : Index_t;
 --        numNode : Index_t;

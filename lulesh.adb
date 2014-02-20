@@ -310,15 +310,15 @@ package body LULESH is
    --x {
    procedure CollectDomainNodesToElemNodes
      (domain     : access Domain_Record;
-      elemToNode : in Elem_Node_Index_Array;
-      elemNodes  : out Elem_Node_Coord_Value_Array_Array)
+      elemToNode : in     Elem_Node_Index_Array;
+      elemNodes  : out    Elem_Node_XYZ_Real_Array)
      with Inline
    is
    begin
       for node_Index in Elem_Node_Range loop
-         for coord_Index in Coord_Names loop
-            elemNodes (node_Index)(coord_Index) :=
-              domain.coords (elemToNode (node_Index))(coord_index);
+         for coord_Index in XYZ_Names loop
+            elemNodes (node_Index, coord_Index) :=
+              domain.coordinates (elemToNode (node_Index))(coord_index);
          end loop;
       end loop;
    end CollectDomainNodesToElemNodes;
@@ -332,7 +332,7 @@ package body LULESH is
    --x {
    procedure InitStressTermsForElems
      (domain : access Domain_Record;
-      sig    : out Elem_Node_Coord_Value_Array_Array)
+      sig    : out Elem_Node_XYZ_Real_Array_Array)
      with Inline
    is
       ---    //
@@ -344,7 +344,7 @@ package body LULESH is
       --x       sigxx[i] = sigyy[i] = sigzz[i] =  - domain.p(i) - domain.q(i) ;
       --x    }
       for i in sig'Range loop
-            sig (i) := (others => - domain.p(i) - domain.q(i));
+            sig (i) := (others => - domain.pressure(i) - domain.q(i));
       end loop;
       --x }
    end InitStressTermsForElems;
@@ -358,8 +358,8 @@ package body LULESH is
    --                                        Real_t b[][8],
    --                                        Real_t* const volume )
    procedure CalcElemShapeFunctionDerivatives
-     (N      : in Elem_Node_Coord_Value_Array;
-      b      : out Coord_Elem_Node_Value_Array;
+     (N      : in Elem_Node_XYZ_Real_Array;
+      b      : out XYZ_Elem_Node_Real_Array;
       volume : out Real_t)
      with Inline
    is
@@ -385,62 +385,66 @@ package body LULESH is
       --x   Real_t cjxxi, cjxet, cjxze;
       --x   Real_t cjyxi, cjyet, cjyze;
       --x   Real_t cjzxi, cjzet, cjzze;
-      fj : Coord_XEZ_Value_Array;
-      cj : Coord_XEZ_Value_Array;
+      fj : XYZ_XEZ_Real_Array;
+      cj : XYZ_XEZ_Real_Array;
 
-      procedure Calculate_Xi (Coord : in Coord_Names)
+      procedure Calculate_Xi
+        (coord : in XYZ_Names)
         with Inline is
       begin
-         fj(Coord ,Xi) := 0.125 *
-        (+ (N(6, Coord) - N(0, Coord))
-         + (N(5, Coord) - N(3, Coord))
-         - (N(7, Coord) - N(1, Coord))
-         - (N(4, Coord) - N(2, Coord)));
+         fj(coord ,Xi) := 0.125 *
+        (+ (N(6, coord) - N(0, coord))
+         + (N(5, coord) - N(3, coord))
+         - (N(7, coord) - N(1, coord))
+         - (N(4, coord) - N(2, coord)));
       end Calculate_Xi;
 
-      procedure Calculate_Eta (Coord : in Coord_Names)
+      procedure Calculate_Eta
+        (coord : in XYZ_Names)
         with Inline is
       begin
-         fj(Coord ,Eta) := 0.125 *
-        (+ (N(6, Coord) - N(0, Coord))
-         - (N(5, Coord) - N(3, Coord))
-         + (N(7, Coord) - N(1, Coord))
-         - (N(4, Coord) - N(2, Coord)));
+         fj(coord ,Eta) := 0.125 *
+        (+ (N(6, coord) - N(0, coord))
+         - (N(5, coord) - N(3, coord))
+         + (N(7, coord) - N(1, coord))
+         - (N(4, coord) - N(2, coord)));
       end Calculate_Eta;
 
-      procedure Calculate_Zeta (Coord : in Coord_Names)
+      procedure Calculate_Zeta
+        (coord : in XYZ_Names)
         with Inline is
       begin
-         fj(Coord ,Zeta) := 0.125 *
-        (+ (N(6, Coord) - N(0, Coord))
-         + (N(5, Coord) - N(3, Coord))
-         + (N(7, Coord) - N(1, Coord))
-         + (N(4, Coord) - N(2, Coord)));
+         fj(coord ,Zeta) := 0.125 *
+        (+ (N(6, coord) - N(0, coord))
+         + (N(5, coord) - N(3, coord))
+         + (N(7, coord) - N(1, coord))
+         + (N(4, coord) - N(2, coord)));
       end Calculate_Zeta;
 
-      procedure Calculate_Partial (Coord : in Coord_Names)
+      procedure Calculate_Partial
+        (coord : in XYZ_Names)
         with Inline is
       begin
-         b(Coord, 0) :=
-           -  cj(Coord, Xi)
-           -  cj(Coord, Eta)
-           -  cj(Coord, Zeta);
-         b(Coord, 1) :=
-           +  cj(Coord, Xi)
-           -  cj(Coord, Eta)
-           -  cj(Coord, Zeta);
-         b(Coord, 2) :=
-           +  cj(Coord, Xi)
-           +  cj(Coord, Eta)
-           -  cj(Coord, Zeta);
-         b(Coord, 3) :=
-           -  cj(Coord, Xi)
-           +  cj(Coord, Eta)
-           -  cj(Coord, Zeta);
-         b(Coord, 4) := - b(Coord, 2);
-         b(Coord, 5) := - b(Coord, 3);
-         b(Coord, 6) := - b(Coord, 0);
-         b(Coord, 7) := - b(Coord, 1);
+         b(coord, 0) :=
+           -  cj(coord, Xi)
+           -  cj(coord, Eta)
+           -  cj(coord, Zeta);
+         b(coord, 1) :=
+           +  cj(coord, Xi)
+           -  cj(coord, Eta)
+           -  cj(coord, Zeta);
+         b(coord, 2) :=
+           +  cj(coord, Xi)
+           +  cj(coord, Eta)
+           -  cj(coord, Zeta);
+         b(coord, 3) :=
+           -  cj(coord, Xi)
+           +  cj(coord, Eta)
+           -  cj(coord, Zeta);
+         b(coord, 4) := - b(coord, 2);
+         b(coord, 5) := - b(coord, 3);
+         b(coord, 6) := - b(coord, 0);
+         b(coord, 7) := - b(coord, 1);
       end Calculate_Partial;
 
    begin
@@ -456,7 +460,7 @@ package body LULESH is
       --x   fjzet = Real_t(.125) * ( (z6-z0) - (z5-z3) + (z7-z1) - (z4-z2) );
       --x   fjzze = Real_t(.125) * ( (z6-z0) + (z5-z3) + (z7-z1) + (z4-z2) );
 
-      for Index in Coord_Names loop
+      for Index in XYZ_Names loop
          Calculate_Xi (Index);
          Calculate_Eta (Index);
          Calculate_Zeta (Index);
@@ -532,7 +536,7 @@ package body LULESH is
       --x   b[2][5] = -b[2][3];
       --x   b[2][6] = -b[2][0];
       --x   b[2][7] = -b[2][1];
-      for Index in Coord_Names loop
+      for Index in XYZ_Names loop
          Calculate_Partial (Index);
       end loop;
 
@@ -547,6 +551,20 @@ package body LULESH is
 
    -- /******************************************/
 
+   function Calc_Bisect_0 (Values : in Face_Node_Real_Array) return Real_t is
+     (0.5 * (- Values (0)
+             - Values (1)
+             + Values (2)
+             + Values (3)))
+   with Inline;
+
+   function Calc_Bisect_1 (Values : in Face_Node_Real_Array) return Real_t is
+     (0.5 * (- Values (0)
+             + Values (1)
+             + Values (2)
+             - Values (3)))
+   with Inline;
+
    --x static inline
    --x void SumElemFaceNormal(Real_t *normalX0, Real_t *normalY0, Real_t *normalZ0,
    --x                        Real_t *normalX1, Real_t *normalY1, Real_t *normalZ1,
@@ -557,15 +575,14 @@ package body LULESH is
    --x                        const Real_t x2, const Real_t y2, const Real_t z2,
    --x                        const Real_t x3, const Real_t y3, const Real_t z3)
    --x {
-
    procedure SumElemFaceNormal
-   -- Using four parms here instead of an array because it will
-   -- be called with disjoint elements of an array:
-     (n0 : in out Coord_Value_Array;
-      n1 : in out Coord_Value_Array;
-      n2 : in out Coord_Value_Array;
-      n3 : in out Coord_Value_Array;
-      Face_Nodes : in Face_Node_Coord_Value_Array_Array)
+   -- Using four parms here instead of an array because this will be called with
+   -- disjoint elements of an array, and an aggregate is not a variable:
+     (n0         : in out XYZ_Real_Array;
+      n1         : in out XYZ_Real_Array;
+      n2         : in out XYZ_Real_Array;
+      n3         : in out XYZ_Real_Array;
+      Face_Nodes : in Face_Node_XYZ_Real_Array_Array)
      with Inline
    is
       --x    Real_t bisectX0 = Real_t(0.5) * (x3 + x2 - x1 - x0);
@@ -577,36 +594,24 @@ package body LULESH is
       --x    Real_t areaX = Real_t(0.25) * (bisectY0 * bisectZ1 - bisectZ0 * bisectY1);
       --x    Real_t areaY = Real_t(0.25) * (bisectZ0 * bisectX1 - bisectX0 * bisectZ1);
       --x    Real_t areaZ = Real_t(0.25) * (bisectX0 * bisectY1 - bisectY0 * bisectX1);
-      function Calc_Bisect_0 (Values : in Face_Node_Value_Array) return Real_t is
-        (0.5 * (- Values (0)
-                - Values (1)
-                + Values (2)
-                + Values (3)))
-        with Inline;
 
-      function Calc_Bisect_1 (Values : in Face_Node_Value_Array) return Real_t is
-        (0.5 * (- Values (0)
-                + Values (1)
-                + Values (2)
-                - Values (3)))
-        with Inline;
-
-      x_Coords : constant Face_Node_Value_Array :=
+      -- Because Face_Nodes is an array of arrays of Coord values:
+      x_Coords : constant Face_Node_Real_Array :=
         (Face_Nodes (0)(X),
          Face_Nodes (1)(X),
          Face_Nodes (2)(X),
          Face_Nodes (3)(X));
-      y_Coords : constant Face_Node_Value_Array :=
+      y_Coords : constant Face_Node_Real_Array :=
         (Face_Nodes (0)(Y),
          Face_Nodes (1)(Y),
          Face_Nodes (2)(Y),
          Face_Nodes (3)(Y));
-      z_Coords : constant Face_Node_Value_Array :=
+      z_Coords : constant Face_Node_Real_Array :=
         (Face_Nodes (0)(Z),
          Face_Nodes (1)(Z),
          Face_Nodes (2)(Z),
          Face_Nodes (3)(Z));
-      bisect : constant Bisect_Coord_Value_Array :=
+      bisect : constant Bisect_XYZ_Real_Array :=
         (0 =>
            (X => Calc_Bisect_0 (x_Coords),
             Y => Calc_Bisect_0 (y_Coords),
@@ -616,12 +621,13 @@ package body LULESH is
             Y => Calc_Bisect_1 (y_Coords),
             Z => Calc_Bisect_1 (z_Coords)));
 
-      function Calc_Area (D1, D2 : in Dimensions) return Real_t is
-        (0.25 *
-           (bisect (0, D1) * bisect (1, D2) - bisect (0, D2) * bisect (1, D1)))
+      function Calc_Area
+        (D1, D2 : in Dimensions) return Real_t is
+        (0.25 * (bisect (0, D1) * bisect (1, D2) -
+                 bisect (0, D2) * bisect (1, D1)))
         with Inline;
 
-      area : constant Coord_Value_Array :=
+      area : constant XYZ_Real_Array :=
         (X => Calc_Area (Y, Z),
          Y => Calc_Area (Z, X),
          Z => Calc_Area (X, Y));
@@ -640,7 +646,7 @@ package body LULESH is
       --x    *normalZ1 += areaZ;
       --x    *normalZ2 += areaZ;
       --x    *normalZ3 += areaZ;
-      for coord in Coord_Names loop
+      for coord in XYZ_Names loop
          n0(coord) := n0(coord) + area (coord);
          n1(coord) := n1(coord) + area (coord);
          n2(coord) := n2(coord) + area (coord);
@@ -670,8 +676,8 @@ package body LULESH is
       (4, 7, 6, 5));
 
    procedure CalcElemNodeNormals
-     (pf         : in out Elem_Node_Coord_Value_Array_Array;
-      elem_Nodes : in     Elem_Node_Coord_Value_Array_Array)
+     (pf         : in out XYZ_Elem_Node_Real_Array;
+      elem_Nodes : in     Elem_Node_XYZ_Real_Array_Array)
      with Inline
    is
    begin
@@ -749,9 +755,9 @@ package body LULESH is
    --                                   Real_t fx[], Real_t fy[], Real_t fz[] )
    -- {
    procedure SumElemStressesToNodeForces
-     (B      : in     Elem_Node_Coord_Value_Array;
-      stress : in     Coord_Value_Array;
-      f      : in out Elem_Node_Coord_Value_Array)
+     (B      : in     Elem_Node_XYZ_Real_Array;
+      stress : in     XYZ_Real_Array;
+      f      : in out Elem_Node_XYZ_Real_Array)
      with Inline
    is
    begin
@@ -777,12 +783,8 @@ package body LULESH is
    --x {
    procedure IntegrateStressForElems
      (domain  : not null access Domain_Record;
-      sigxx   : not null access Real_t_Array;
-      sigyy   : not null access Real_t_Array;
-      sigzz   : not null access Real_t_Array;
-      determ  : not null access Real_t_Array;
-      numElem : in Index_t;
-      numNode : in Index_t)
+      sig     : not null access XYZ_Real_Array;
+      determ  : not null access Real_t_Array)
      with Inline is
 
       -- #if _OPENMP
@@ -799,13 +801,11 @@ package body LULESH is
       --x    Real_t fx_local[8] ;
       --x    Real_t fy_local[8] ;
       --x    Real_t fz_local[8] ;
-      numElem8 : Index_t := numElem * 8;
+      numElem8 : Index_t := domain.numElem * 8;
       fx_elem  : Real_t_Array_Access;
       fy_elem  : Real_t_Array_Access;
       fz_elem  : Real_t_Array_Access;
-      fx_local : Real_t_Array (0..7);
-      fy_local : Real_t_Array (0..7);
-      fz_local : Real_t_Array (0..7);
+      f_local : XYZ_Elem_Node_Real_Array;
    begin
       --x   if (numthreads > 1) {
       --x      fx_elem = Allocate<Real_t>(numElem8) ;
@@ -823,7 +823,7 @@ package body LULESH is
       -- #pragma omp parallel for firstprivate(numElem)
       --x   for( Index_t k=0 ; k<numElem ; ++k )
       --x   {
-      for k in 0..numElem-1 loop
+      for k in domain.elem_nodes'Range loop
          declare
             --x     const Index_t* const elemToNode = domain.nodelist(k);
             --x     Real_t B[3][8] ;// shape function derivatives
@@ -831,40 +831,30 @@ package body LULESH is
             --x     Real_t y_local[8] ;
             --x     Real_t z_local[8] ;
             elemToNode : constant Elem_Node_Index_Array
-              := domain.nodelist(Index_t(k));
-            B          : array (0..2) of Elem_Node_Value_Array;
-            x_local    : Elem_Node_Value_Array;
-            y_local    : Elem_Node_Value_Array;
-            z_local    : Elem_Node_Value_Array;
+              := domain.elem_nodes(k);
+            B     : XYZ_Elem_Node_Real_Array;
+            local : Elem_Node_XYZ_Real_Array;
          begin
             ---     // get nodal coordinates from global arrays and copy into local arrays.
             --x     CollectDomainNodesToElemNodes(domain, elemToNode, x_local, y_local, z_local);
             CollectDomainNodesToElemNodes
               (domain,
                elemToNode,
-               x_local,
-               y_local,
-               z_local);
+               local);
 
             ---     // Volume calculation involves extra work for numerical consistency
             --x     CalcElemShapeFunctionDerivatives(x_local, y_local, z_local,
             --x                                          B, &determ[k]);
             CalcElemShapeFunctionDerivatives
-              (x_local,
-               y_local,
-               z_local,
+              (local,
                B,
                determ (k)'Access);
 
             --     CalcElemNodeNormals( B[0] , B[1], B[2],
             --                           x_local, y_local, z_local );
             CalcElemNodeNormals
-              (B(0),
-               B(1),
-               B(2),
-               x_local,
-               y_local,
-               z_local);
+              (B,
+               local);
 
             --     if (numthreads > 1) {
             if (numthreads > 1) then
@@ -904,13 +894,13 @@ package body LULESH is
                --           domain.fz(gnode) += fz_local[lnode];
                --        }
                --     }
-               for lnode in Index_t range 0..7 loop
+               for lnode in Elem_Node_Range loop
                   declare
                      gnode : constant Index_t := elemToNode (lnode);
                   begin
-                     domain.fx (gnode) := domain.fx (gnode) + fx_local(lnode);
-                     domain.fy (gnode) := domain.fy (gnode) + fy_local(lnode);
-                     domain.fz (gnode) := domain.fz (gnode) + fz_local(lnode);
+                     domain.force (gnode, X) := domain.force (gnode, X) + fx_local(lnode);
+                     domain.force (gnode, Y) := domain.force (gnode, Y) + fy_local(lnode);
+                     domain.force (gnode, Z) := domain.force (gnode, Z) + fz_local(lnode);
                   end;
                end loop;
             end if;
@@ -948,6 +938,8 @@ package body LULESH is
 
    -- /******************************************/
 
+   twelfth : constant := 1.0 / 12.0;
+
    -- static inline
    -- void VoluDer(const Real_t x0, const Real_t x1, const Real_t x2,
    --              const Real_t x3, const Real_t x4, const Real_t x5,
@@ -957,8 +949,13 @@ package body LULESH is
    --              const Real_t z3, const Real_t z4, const Real_t z5,
    --              Real_t* dvdx, Real_t* dvdy, Real_t* dvdz)
    -- {
+   procedure VoluDer
+     (fc  : in  Face_XYZ_Real_Array_Array;
+      dvd : out XYZ_Real_Array)
+     with Inline
+   is
+   begin
    --    const Real_t twelfth = Real_t(1.0) / Real_t(12.0) ;
-
    --    *dvdx =
    --       (y1 + y2) * (z0 + z1) - (y0 + y1) * (z1 + z2) +
    --       (y0 + y4) * (z3 + z4) - (y3 + y4) * (z0 + z4) -
@@ -967,7 +964,6 @@ package body LULESH is
    --       - (x1 + x2) * (z0 + z1) + (x0 + x1) * (z1 + z2) -
    --       (x0 + x4) * (z3 + z4) + (x3 + x4) * (z0 + z4) +
    --       (x2 + x5) * (z3 + z5) - (x3 + x5) * (z2 + z5);
-
    --    *dvdz =
    --       - (y1 + y2) * (x0 + x1) + (y0 + y1) * (x1 + x2) -
    --       (y0 + y4) * (x3 + x4) + (y3 + y4) * (x0 + x4) +
@@ -976,7 +972,31 @@ package body LULESH is
    --    *dvdx *= twelfth;
    --    *dvdy *= twelfth;
    --    *dvdz *= twelfth;
+
+      dvd(X) := twelfth *
+        (+ (fc(1)(y) + fc(2)(y)) * (fc(0)(z) + fc(1)(z))
+         - (fc(0)(y) + fc(1)(y)) * (fc(1)(z) + fc(2)(z))
+         + (fc(0)(y) + fc(4)(y)) * (fc(3)(z) + fc(4)(z))
+         - (fc(3)(y) + fc(4)(y)) * (fc(0)(z) + fc(4)(z))
+         - (fc(2)(y) + fc(5)(y)) * (fc(3)(z) + fc(5)(z))
+         + (fc(3)(y) + fc(5)(y)) * (fc(2)(z) + fc(5)(z)));
+      dvd(Y) := twelfth *
+        (- (fc(1)(x) + fc(2)(x)) * (fc(0)(z) + fc(1)(z))
+         + (fc(0)(x) + fc(1)(x)) * (fc(1)(z) + fc(2)(z))
+         - (fc(0)(x) + fc(4)(x)) * (fc(3)(z) + fc(4)(z))
+         + (fc(3)(x) + fc(4)(x)) * (fc(0)(z) + fc(4)(z))
+         + (fc(2)(x) + fc(5)(x)) * (fc(3)(z) + fc(5)(z))
+         - (fc(3)(x) + fc(5)(x)) * (fc(2)(z) + fc(5)(z)));
+      dvd(Z) := twelfth *
+        (- (fc(1)(y) + fc(2)(y)) * (fc(0)(x) + fc(1)(x))
+         + (fc(0)(y) + fc(1)(y)) * (fc(1)(x) + fc(2)(x))
+         - (fc(0)(y) + fc(4)(y)) * (fc(3)(x) + fc(4)(x))
+         + (fc(3)(y) + fc(4)(y)) * (fc(0)(x) + fc(4)(x))
+         + (fc(2)(y) + fc(5)(y)) * (fc(3)(x) + fc(5)(x))
+         - (fc(3)(y) + fc(5)(y)) * (fc(2)(x) + fc(5)(x)));
+
    -- }
+   end VoluDer;
 
    -- /******************************************/
 
@@ -1110,6 +1130,7 @@ package body LULESH is
    --    gamma[0][5] = Real_t(-1.);
    --    gamma[0][6] = Real_t( 1.);
    --    gamma[0][7] = Real_t( 1.);
+
    --    gamma[1][0] = Real_t( 1.);
    --    gamma[1][1] = Real_t(-1.);
    --    gamma[1][2] = Real_t(-1.);
@@ -1118,6 +1139,7 @@ package body LULESH is
    --    gamma[1][5] = Real_t( 1.);
    --    gamma[1][6] = Real_t( 1.);
    --    gamma[1][7] = Real_t(-1.);
+
    --    gamma[2][0] = Real_t( 1.);
    --    gamma[2][1] = Real_t(-1.);
    --    gamma[2][2] = Real_t( 1.);
@@ -1126,6 +1148,7 @@ package body LULESH is
    --    gamma[2][5] = Real_t(-1.);
    --    gamma[2][6] = Real_t( 1.);
    --    gamma[2][7] = Real_t(-1.);
+
    --    gamma[3][0] = Real_t(-1.);
    --    gamma[3][1] = Real_t( 1.);
    --    gamma[3][2] = Real_t(-1.);
@@ -1509,10 +1532,10 @@ package body LULESH is
       --x      domain.fy(i) = Real_t(0.0) ;
       --x      domain.fz(i) = Real_t(0.0) ;
       --x   }
-      for index in 0 .. numNode loop
-         domain.fx (index) := 0.0;
-         domain.fy (index) := 0.0;
-         domain.fz (index) := 0.0;
+      -- Looping instead of using an aggregate because an aggreagate might be
+      -- very large on the stack:
+      for index in domain.force'Range loop
+         domain.force (index) := (others => 0.0);
       end loop;
 
       ---   /* Calcforce calls partial, force, hourq */
@@ -1630,7 +1653,7 @@ package body LULESH is
       --x    const Real_t delt = domain.deltatime() ;
       --x    Real_t u_cut = domain.u_cut() ;
       delt  : constant Real_t := domain.deltatime;
-      u_cut : Real_t := domain.u_cut;
+      u_cut : Real_t := domain.velocity_tolerance;
    begin
       ---   /* time of boundary condition evaluation is beginning of step for force and
       ---    * acceleration boundary conditions. */
