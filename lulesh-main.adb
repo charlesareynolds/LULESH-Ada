@@ -114,10 +114,10 @@ begin
       --x                        side, opts.numReg, opts.balance, opts.cost) ;
       locDom := LULESH.Init.Create
         (numRanks => numRanks,
-         colLoc   => Index_t (col),
-         rowLoc   => Index_t (row),
-         planeLoc => Index_t (plane),
-         nx       => Index_t (opts.nx),
+         colLoc   => Index_Type (col),
+         rowLoc   => Index_Type (row),
+         planeLoc => Index_Type (plane),
+         nx       => Index_Type (opts.nx),
          tp       => side,
          nr       => opts.numReg,
          balance  => opts.balance,
@@ -162,15 +162,16 @@ begin
    --x                 locDom->cycle(), double(locDom->time()), double(locDom->deltatime()) ) ;
    --x       }
    --x    }
-   while locDom.time < locDom.stoptime and locDom.cycle < opts.its loop
+   while locDom.variables.time < locDom.variables.stoptime and
+     locDom.variables.cycle < opts.its loop
 
       TimeIncrement (locDom);
       LagrangeLeapFrog (locDom);
 
       if opts.showProg and not opts.quiet and myRank = 0 then
-         ATI.Put_Line ("cycle = " & locDom.cycle'Img
-                       & ", time = "& locDom.time'Img
-                       & ", dt = " & locDom.deltatime'Img);
+         ATI.Put_Line ("cycle = " & locDom.variables.cycle'Img
+                       & ", time = "& locDom.variables.time'Img
+                       & ", dt = " & locDom.variables.deltatime'Img);
       end if;
    end loop;
 
@@ -201,9 +202,9 @@ begin
    if opts.viz then
       LULESH.Viz.DumpToVisit
         (domainn  => locDom,
-         numfiles => IC.int (opts.numFiles),
-         myRank   => IC.int (myRank),
-         numRanks => IC.int (numRanks));
+         numfiles => opts.numFiles,
+         myRank   => myRank,
+         numRanks => numRanks);
    end if;
 
    --x    if ((myRank == 0) && (opts.quiet == 0)) {

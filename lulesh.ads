@@ -1,12 +1,11 @@
 with Ada.Calendar;
 with Ada.Containers.Vectors;
 with Ada.Numerics.Generic_Elementary_Functions;
-with Interfaces.C;
+with Interfaces;
 
 package LULESH is
 
    package AC renames Ada.Calendar;
-   package IC renames Interfaces.C;
 
    --- #if !defined(USE_MPI)
    --- # error "You should specify USE_MPI=0 or USE_MPI=1 on the compile line"
@@ -50,82 +49,68 @@ package LULESH is
    --x typedef int    Index_t ; // array subscript and loop index
    --x typedef real8  Real_t ;  // floating point representation
    --x typedef int    Int_t ;   // integer representation
-   type real4   is new Interfaces.C.C_float;
-   type real8   is new Interfaces.C.double;
-   type real10  is new Interfaces.C.long_double;
-   type Index_t is new Interfaces.C.int range 0..Interfaces.C.int'Last;
-   type Real_t  is new real8;
-   type Int_t   is new Interfaces.C.int;
+   type real4      is new Interfaces.IEEE_Float_32;
+   type real8      is new Interfaces.IEEE_Float_64;
+   type real10     is new Interfaces.IEEE_Extended_Float;
+   type Index_Type is new Natural;
+   type Real_Type  is new real8;
+   type Int_t      is new Integer;
 
    ---------------------------------------
 
-   type Real_t_Access is access all Real_t;
-   type Real_t_Array is array (Index_t range <>) of Real_t;
-   type Real_t_Array_Access is access Real_t_Array;
-   type Real_t_Array_Access_nn is not null access Real_t_Array;
+   subtype Bisect_Range               is Index_Type range 0..1;
+   subtype Element_Index_Type         is Index_Type;
+   subtype Face_Index_Type            is Index_Type range 0..5;
+   subtype NodesPerElement_Index_Type is Index_Type range 0..7;
+   subtype NodesPerFace_Index_Type    is Index_Type range 0..3;
+   subtype Node_Index_Type            is Index_Type;
+   subtype Region_Index_Type          is Index_Type;
 
-   type Index_t_Array is array (Index_t range <>) of Index_t;
+   type Real_Array is array (Index_Type range <>) of Real_Type;
+   --     type Real_Array_Access is access Real_Array;
+   type Index_Array is array (Index_Type range <>) of Index_Type;
 
-   type XYZ_Names is (X, Y, Z);
-   subtype Dimensions is XYZ_Names;
+   type XYZ_Names           is (X, Y, Z);
+   subtype Dimensions       is XYZ_Names;
    subtype Coordinate_Names is XYZ_Names;
 
    type XEZ_Type is (Xi, Eta, Zeta);
    Et : constant XEZ_Type := Eta;
    Ze : constant XEZ_Type := Zeta;
 
-   subtype Elem_Node_Range is Index_t range 0..7;
-   subtype Face_Node_Range is Index_t range 0..3;
-   subtype Bisect_Range is Index_t range 0..1;
-   subtype Face_Range is Index_t range 0..5;
+--     type XYZ_Real_Array is array
+--       (XYZ_Names) of Real_Type;
 
-   subtype Elem_Node_Index_Array is Index_t_Array (Elem_Node_Range);
-   subtype Elem_Node_Real_Array is Real_t_Array (Elem_Node_Range);
-   subtype Face_Node_Real_Array is Real_t_Array (Face_Node_Range);
-   type XYZ_Real_Array is array (XYZ_Names) of Real_t;
+--     type Bisect_XYZ_Real_Array is array
+--       (Bisect_Range, XYZ_Names) of Real_Type;
+   subtype NodesPerElement_Index_Array is
+     Index_Array (NodesPerElement_Index_Type);
+   type NodesPerElement_Index_Array_Array is array
+     (Index_Type range <>) of NodesPerElement_Index_Array;
+--     type NodesPerElement_XYZ_Real_Array is array
+--       (NodesPerElement_Index_Type, XYZ_Names) of Real_Type;
+--     type NodesPerElement_XYZ_Real_Array_Array is array
+--       (NodesPerElement_Index_Type) of XYZ_Real_Array;
+   type Face_NodesPerFace_NodesPerElement_Array is array
+     (Face_Index_Type, NodesPerFace_Index_Type) of NodesPerElement_Index_Type;
+--     subtype NodesPerFace_Real_Array is
+--       Real_Array (NodesPerFace_Index_Type);
+--     type NodesPerFace_XYZ_Real_Array_Array is array
+--       (NodesPerFace_Index_Type) of XYZ_Real_Array;
+--     type XYZ_NodesPerElement_Real_Array is array
+--       (XYZ_Names, NodesPerElement_Index_Type) of Real_Type;
+--     type XYZ_XEZ_Real_Array is array
+--       (XYZ_Names, XEZ_Type) of Real_Type;
 
-   type XYZ_Elem_Node_Real_Array is array
-     (XYZ_Names, Elem_Node_Range) of Real_t;
-   type Elem_Node_XYZ_Real_Array is array
-     (Elem_Node_Range, XYZ_Names) of Real_t;
-   type Elem_Node_XYZ_Real_Array_Array is array
-     (Elem_Node_Range) of XYZ_Real_Array;
 
-   type XYZ_Face_Node_Real_Array is array
-     (XYZ_Names, Face_Node_Range) of Real_t;
-   type XYZ_Face_Node_Real_Array_Array is array
-     (XYZ_Names) of Face_Node_Real_Array;
-   type Face_XYZ_Real_Array_Array is array
-     (Face_Range) of XYZ_Real_Array;
-   type Face_Node_XYZ_Real_Array is array
-     (Face_Node_Range, XYZ_Names) of Real_t;
-   type Face_Node_XYZ_Real_Array_Array is array
-     (Face_Node_Range) of XYZ_Real_Array;
 
-   type XYZ_XEZ_Real_Array is array
-     (XYZ_Names, XEZ_Type) of Real_t;
+   type Domain_Record
+     (numNode : Node_Index_Type;
+      numElem : Element_Index_Type;
+      numReg  : Region_Index_Type)
+   is private;
 
-   type Bisect_XYZ_Real_Array is array
-     (Bisect_Range, XYZ_Names) of Real_t;
-   subtype Area_Array is XYZ_Real_Array;
-
-   type Face_Face_Node_Elem_Node_Array is array
-     (Face_Range, Face_Node_Range) of Elem_Node_Range;
-
-   type Real_t_Vector is
-     array (Index_t range <>) of Real_t;
-
-   type Int_t_Vector is
-     array (Index_t range <>) of Int_t;
-
-   type Index_t_Vector is
-     array (Index_t range <>) of Index_t;
-
-   type Elem_Node_Index_Array_Vector is
-     array (Index_t range <>) of Elem_Node_Index_Array;
-
-   type XYZ_Real_Array_Vector is
-     array (Index_t range <>) of XYZ_Real_Array;
+   type Access_Domain is access Domain_Record;
 
    ---------------------------------------
 
@@ -231,7 +216,7 @@ package LULESH is
    --- // Assume Real_t is an "integral power of 2" bytes wide
    --x #define CACHE_COHERENCE_PAD_REAL (128 / sizeof(Real_t))
    Byte_Size: constant := 8;
-   CACHE_COHERENCE_PAD_REAL : constant := 128 / (Real_t'Size / Byte_Size);
+   CACHE_COHERENCE_PAD_REAL : constant := 128 / (Real_Type'Size / Byte_Size);
 
    -- #define CACHE_ALIGN_REAL(n) \
    --    (((n) + (CACHE_COHERENCE_PAD_REAL - 1)) & ~(CACHE_COHERENCE_PAD_REAL-1))
@@ -261,10 +246,6 @@ package LULESH is
 
 
    -- class Domain {
-   type Domain_Record
-     (numNode : Index_t;
-      numElem : Index_t) is private;
-   type Access_Domain is access Domain_Record;
 
    --    public:
 
@@ -365,44 +346,10 @@ package LULESH is
    --       m_dxx.clear() ;
    --    }
 
-   --    //
-   --    // ACCESSORS
-   --    //
 
-   --    // Node-centered
 
-   --    // Nodal coordinates
-   --    Real_t& x(Index_t idx)    { return m_x[idx] ; }
---     function x
---       (Self : not null access Domain_Record;
---        idx  : in Index_t)
---        return Real_t_Access is
---       (Self.x (idx)'Access);
-   --    Real_t& y(Index_t idx)    { return m_y[idx] ; }
-   --    Real_t& z(Index_t idx)    { return m_z[idx] ; }
-
-   --    // Nodal velocities
-   --    Real_t& xd(Index_t idx)   { return m_xd[idx] ; }
-   --    Real_t& yd(Index_t idx)   { return m_yd[idx] ; }
-   --    Real_t& zd(Index_t idx)   { return m_zd[idx] ; }
-
-   --    // Nodal accelerations
-   --    Real_t& xdd(Index_t idx)  { return m_xdd[idx] ; }
-   --    Real_t& ydd(Index_t idx)  { return m_ydd[idx] ; }
-   --    Real_t& zdd(Index_t idx)  { return m_zdd[idx] ; }
-
-   --    // Nodal forces
-   --    Real_t& fx(Index_t idx)   { return m_fx[idx] ; }
-   --    Real_t& fy(Index_t idx)   { return m_fy[idx] ; }
-   --    Real_t& fz(Index_t idx)   { return m_fz[idx] ; }
-
-   --    // Nodal mass
-   --    Real_t& nodalMass(Index_t idx) { return m_nodalMass[idx] ; }
 
    --    // Nodes on symmertry planes
-   --    Index_t symmX(Index_t idx) { return m_symmX[idx] ; }
-   --    Index_t symmY(Index_t idx) { return m_symmY[idx] ; }
-   --    Index_t symmZ(Index_t idx) { return m_symmZ[idx] ; }
    --    bool symmXempty()          { return m_symmX.empty(); }
    --    bool symmYempty()          { return m_symmY.empty(); }
    --    bool symmZempty()          { return m_symmZ.empty(); }
@@ -410,72 +357,7 @@ package LULESH is
    --    //
    --    // Element-centered
    --    //
-   --    Index_t&  regElemSize(Index_t idx) { return m_regElemSize[idx] ; }
-   --    Index_t&  regNumList(Index_t idx) { return m_regNumList[idx] ; }
-   --    Index_t*  regNumList()            { return &m_regNumList[0] ; }
-   --    Index_t*  regElemlist(Int_t r)    { return m_regElemlist[r] ; }
-   --    Index_t&  regElemlist(Int_t r, Index_t idx) { return m_regElemlist[r][idx] ; }
-
    --    Index_t*  nodelist(Index_t idx)    { return &m_nodelist[Index_t(8)*idx] ; }
-
-   --    // elem connectivities through face
-   --    Index_t&  lxim(Index_t idx) { return m_lxim[idx] ; }
-   --    Index_t&  lxip(Index_t idx) { return m_lxip[idx] ; }
-   --    Index_t&  letam(Index_t idx) { return m_letam[idx] ; }
-   --    Index_t&  letap(Index_t idx) { return m_letap[idx] ; }
-   --    Index_t&  lzetam(Index_t idx) { return m_lzetam[idx] ; }
-   --    Index_t&  lzetap(Index_t idx) { return m_lzetap[idx] ; }
-
-   --    // elem face symm/free-surface flag
-   --    Int_t&  elemBC(Index_t idx) { return m_elemBC[idx] ; }
-
-   --    // Principal strains - temporary
-   --    Real_t& dxx(Index_t idx)  { return m_dxx[idx] ; }
-   --    Real_t& dyy(Index_t idx)  { return m_dyy[idx] ; }
-   --    Real_t& dzz(Index_t idx)  { return m_dzz[idx] ; }
-
-   --    // Velocity gradient - temporary
-   --    Real_t& delv_xi(Index_t idx)    { return m_delv_xi[idx] ; }
-   --    Real_t& delv_eta(Index_t idx)   { return m_delv_eta[idx] ; }
-   --    Real_t& delv_zeta(Index_t idx)  { return m_delv_zeta[idx] ; }
-
-   --    // Position gradient - temporary
-   --    Real_t& delx_xi(Index_t idx)    { return m_delx_xi[idx] ; }
-   --    Real_t& delx_eta(Index_t idx)   { return m_delx_eta[idx] ; }
-   --    Real_t& delx_zeta(Index_t idx)  { return m_delx_zeta[idx] ; }
-
-   --    // Energy
-   --    Real_t& e(Index_t idx)          { return m_e[idx] ; }
-
-   --    // Pressure
-   --    Real_t& p(Index_t idx)          { return m_p[idx] ; }
-
-   --    // Artificial viscosity
-   --    Real_t& q(Index_t idx)          { return m_q[idx] ; }
-
-   --    // Linear term for q
-   --    Real_t& ql(Index_t idx)         { return m_ql[idx] ; }
-   --    // Quadratic term for q
-   --    Real_t& qq(Index_t idx)         { return m_qq[idx] ; }
-
-   --    // Relative volume
-   --    Real_t& v(Index_t idx)          { return m_v[idx] ; }
-   --    Real_t& delv(Index_t idx)       { return m_delv[idx] ; }
-
-   --    // Reference volume
-   --    Real_t& volo(Index_t idx)       { return m_volo[idx] ; }
-
-   --    // volume derivative over volume
-   --    Real_t& vdov(Index_t idx)       { return m_vdov[idx] ; }
-
-   --    // Element characteristic length
-   --    Real_t& arealg(Index_t idx)     { return m_arealg[idx] ; }
-
-   --    // Sound speed
-   --    Real_t& ss(Index_t idx)         { return m_ss[idx] ; }
-
-   --    // Element mass
-   --    Real_t& elemMass(Index_t idx)  { return m_elemMass[idx] ; }
 
    --    Index_t nodeElemCount(Index_t idx)
    --    { return m_nodeElemStart[idx+1] - m_nodeElemStart[idx] ; }
@@ -483,61 +365,7 @@ package LULESH is
    --    Index_t *nodeElemCornerList(Index_t idx)
    --    { return &m_nodeElemCornerList[m_nodeElemStart[idx]] ; }
 
-   --    // Parameters
 
-   --    // Cutoffs
-   --    Real_t u_cut() const               { return m_u_cut ; }
-   --    Real_t e_cut() const               { return m_e_cut ; }
-   --    Real_t p_cut() const               { return m_p_cut ; }
-   --    Real_t q_cut() const               { return m_q_cut ; }
-   --    Real_t v_cut() const               { return m_v_cut ; }
-
-   --    // Other constants (usually are settable via input file in real codes)
-   --    Real_t hgcoef() const              { return m_hgcoef ; }
-   --    Real_t qstop() const               { return m_qstop ; }
-   --    Real_t monoq_max_slope() const     { return m_monoq_max_slope ; }
-   --    Real_t monoq_limiter_mult() const  { return m_monoq_limiter_mult ; }
-   --    Real_t ss4o3() const               { return m_ss4o3 ; }
-   --    Real_t qlc_monoq() const           { return m_qlc_monoq ; }
-   --    Real_t qqc_monoq() const           { return m_qqc_monoq ; }
-   --    Real_t qqc() const                 { return m_qqc ; }
-
-   --    Real_t eosvmax() const             { return m_eosvmax ; }
-   --    Real_t eosvmin() const             { return m_eosvmin ; }
-   --    Real_t pmin() const                { return m_pmin ; }
-   --    Real_t emin() const                { return m_emin ; }
-   --    Real_t dvovmax() const             { return m_dvovmax ; }
-   --    Real_t refdens() const             { return m_refdens ; }
-
-   --    // Timestep controls, etc...
-   --    Real_t& time()                 { return m_time ; }
-   --    Real_t& deltatime()            { return m_deltatime ; }
-   --    Real_t& deltatimemultlb()      { return m_deltatimemultlb ; }
-   --    Real_t& deltatimemultub()      { return m_deltatimemultub ; }
-   --    Real_t& stoptime()             { return m_stoptime ; }
-   --    Real_t& dtcourant()            { return m_dtcourant ; }
-   --    Real_t& dthydro()              { return m_dthydro ; }
-   --    Real_t& dtmax()                { return m_dtmax ; }
-   --    Real_t& dtfixed()              { return m_dtfixed ; }
-
-   --    Int_t&  cycle()                { return m_cycle ; }
-   --    Index_t&  numRanks()           { return m_numRanks ; }
-
-   --    Index_t&  colLoc()             { return m_colLoc ; }
-   --    Index_t&  rowLoc()             { return m_rowLoc ; }
-   --    Index_t&  planeLoc()           { return m_planeLoc ; }
-   --    Index_t&  tp()                 { return m_tp ; }
-
-   --    Index_t&  sizeX()              { return m_sizeX ; }
-   --    Index_t&  sizeY()              { return m_sizeY ; }
-   --    Index_t&  sizeZ()              { return m_sizeZ ; }
-   --    Index_t&  numReg()             { return m_numReg ; }
-   --    Int_t&  cost()             { return m_cost ; }
-   --    Index_t&  numElem()            { return m_numElem ; }
-   --    Index_t&  numNode()            { return m_numNode ; }
-
-   --    Index_t&  maxPlaneSize()       { return m_maxPlaneSize ; }
-   --    Index_t&  maxEdgeSize()        { return m_maxEdgeSize ; }
 
    --    //
    --    // MPI-Related additional data
@@ -556,60 +384,98 @@ package LULESH is
    --x   private:
 private
 
-   type Node_Centered_Record is record
-      end record;
+   subtype Size_Type is Index_Type;
 
-   ---    //
-   ---    // IMPLEMENTATION
-   ---    //
-   type Domain_Record
-     (numNode : Index_t;
-      numElem : Index_t) is record
+   type Gradient_Magnitude           is new Real_Type;
+   type Grams                        is new Real_Type;
+   type Joules                       is new Real_Type;
+   type Meters                       is new Real_Type;
+   type Meters_Per_Second            is new Real_Type;
+   type Meters_Per_Second_Per_Second is new Real_Type;
+   type Newtons                      is new Real_Type;
 
+   type Acceleration_Vector is array (XYZ_Names) of Meters_Per_Second_Per_Second;
+   type Force_Vector        is array (XYZ_Names) of Newtons;
+   type Gradient_Type       is array (XEZ_Type)  of Gradient_Magnitude;
+   type Location_Type       is array (XYZ_Names) of Meters;
+   type XYZ_Size_Array      is array (XYZ_Names) of Size_Type;
+   type Strain_Vector       is array (XYZ_Names) of Newtons;
+   type Velocity_Vector     is array (XYZ_Names) of Meters_Per_Second;
+
+   type Acceleration_Array  is array (Index_Type range <>) of Acceleration_Vector;
+   type Force_Array         is array (Index_Type range <>) of Force_Vector;
+   type Gradient_Array      is array (Index_Type range <>) of Gradient_Type;
+   type Location_Array      is array (Index_Type range <>) of Location_Type;
+   type Mass_Array          is array (Index_Type range <>) of Grams;
+   type Strain_Array        is array (Index_Type range <>) of Strain_Vector;
+   type Velocity_Array      is array (Index_Type range <>) of Velocity_Vector;
+
+--     type NodesPerElement_Location_Array is array (Index_Type range <>) of Location_Type;
+
+   package Element_Index_Vectors is
+     new Ada.Containers.Vectors
+       (Index_Type   => Index_Type,
+        Element_Type => Element_Index_Type);
+
+   type Region_Element_Vector_Array is array (Region_Index_Type range <>)
+     of Element_Index_Vectors.Vector;
+
+   ---    // Node-centered
+
+   type Nodes_Record (numNode : Node_Index_Type) is record
       --x    std::vector<Real_t> m_x ;  /* coordinates */
       --x    std::vector<Real_t> m_y ;
       --x    std::vector<Real_t> m_z ;
-      coordinates : XYZ_Real_Array_Vector (1..numNode);
+      location : Location_Array (0..numNode);
 
       --x    std::vector<Real_t> m_xd ; /* velocities */
       --x    std::vector<Real_t> m_yd ;
       --x    std::vector<Real_t> m_zd ;
-      velocities : XYZ_Real_Array_Vector (1..numNode);
+      velocity : Velocity_Array (0..numNode);
 
       --x    std::vector<Real_t> m_xdd ; /* accelerations */
       --x    std::vector<Real_t> m_ydd ;
       --x    std::vector<Real_t> m_zdd ;
-      acceleration : XYZ_Real_Array_Vector (1..numNode);
+      acceleration : Acceleration_Array (0..numNode);
 
       --x    std::vector<Real_t> m_fx ;  /* forces */
       --x    std::vector<Real_t> m_fy ;
       --x    std::vector<Real_t> m_fz ;
-      force : XYZ_Real_Array_Vector (1..numNode);
+      force : Force_Array (0..numNode);
 
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
-      nodalMass : Real_t_Vector (1..numNode);
+      mass : Mass_Array (0..numNode);
 
       --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
       --x    std::vector<Index_t> m_symmY ;
       --x    std::vector<Index_t> m_symmZ ;
-      symmX : Index_t_Vector;
-      symmY : Index_t_Vector;
-      symmZ : Index_t_Vector;
+--        symmX : Index_Vector;
+--        symmY : Index_Vector;
+--        symmZ : Index_Vector;
 
+   end record;
+
+   type Elements_Record
+     (numElem : Element_Index_Type;
+      numReg  : Region_Index_Type)
+   is record
       ---    // Element-centered
 
       ---    // Region information
 
       --x    Int_t    m_numReg ;
+      -- Moved to discriminant.
       --x    Int_t    m_cost; //imbalance cost
-   --    Index_t *m_regElemSize ;   // Size of region sets
-   --    Index_t *m_regNumList ;    // Region number per domain element
-   --    Index_t **m_regElemlist ;  // region indexset
-      numReg : Int_t;
-      cost   : Int_t;
+      --x    Index_t *m_regElemSize ;   // Size of region sets
+      --x    Index_t *m_regNumList ;    // Region number per domain element
+      --x    Index_t **m_regElemlist ;  // region indexset
+      imbalance_cost : Int_t;
+      regElemSize    : Index_Array (0..numElem);
+      regNumList     : Index_Array (0..numElem);
+      regElemList    : Region_Element_Vector_Array (0..numReg);
 
       --x    std::vector<Index_t>  m_nodelist ;     /* elemToNode connectivity */
-      elem_nodes : Elem_Node_Index_Array_Vector (0..numElem);
+      node_indexes : NodesPerElement_Index_Array_Array (0..numElem);
 
       --x    std::vector<Index_t>  m_lxim ;  /* element connectivity across each face */
       --x    std::vector<Index_t>  m_lxip ;
@@ -617,71 +483,116 @@ private
       --x    std::vector<Index_t>  m_letap ;
       --x    std::vector<Index_t>  m_lzetam ;
       --x    std::vector<Index_t>  m_lzetap ;
-      --! Or should this be XEZ_Face_Index_Array_Vector?
---        connectivity_m : XEZ_Real_Array_Vector (1..numNode);
---        connectivity_p : XEZ_Real_Array_Vector (1..numNode);
+      --! Or should this be XEZ_Face_Index_Array_Array?
+--        connectivity_m : XEZ_Real_Array_Array (1..numNode);
+--        connectivity_p : XEZ_Real_Array_Array (1..numNode);
 
+   --    // elem face symm/free-surface flag
       --x    std::vector<Int_t>    m_elemBC ;  /* symmetry/free-surface flags for each elem face */
-      elemBC : Face_Int_t_Array_Vector (0..numelem);
+--      elemBC : Face_Int_t_Array_Array (0..numElem-1);
 
       --x    std::vector<Real_t> m_dxx ;  /* principal strains -- temporary */
       --x    std::vector<Real_t> m_dyy ;
       --x    std::vector<Real_t> m_dzz ;
-      principal_strain : XYZ_Real_Array_Vector (0..numElem);
+      principal_strain : Strain_Array (0..numElem);
 
       --x    std::vector<Real_t> m_delv_xi ;    /* velocity gradient -- temporary */
       --x    std::vector<Real_t> m_delv_eta ;
       --x    std::vector<Real_t> m_delv_zeta ;
-      velocity_gradient : XEZ_Real_Array_Vector (0..numElem);
+      velocity_gradient : Gradient_Array (0..numElem);
 
+      --    // Position gradient - temporary
       --x    std::vector<Real_t> m_delx_xi ;    /* coordinate gradient -- temporary */
       --x    std::vector<Real_t> m_delx_eta ;
       --x    std::vector<Real_t> m_delx_zeta ;
-      coordinate_gradient : XEZ_Real_Array_Vector (0..numElem);
+      position_gradient : Gradient_Array (0..numElem);
 
       --x    std::vector<Real_t> m_e ;   /* energy */
-      energy : Real_t;
+      energy : Joules;
 
       --x    std::vector<Real_t> m_p ;   /* pressure */
       --x    std::vector<Real_t> m_q ;   /* q */
       --x    std::vector<Real_t> m_ql ;  /* linear term for q */
       --x    std::vector<Real_t> m_qq ;  /* quadratic term for q */
-      pressure    : Real_t_Vector (0..numElem);
-      q           : Real_t_Vector (0..numElem);
-      q_linear    : Real_t_Vector (0..numElem);
-      q_quadratic : Real_t_Vector (0..numElem);
+      pressure    : Real_Array (0..numElem);
+      --    // Artificial viscosity
+      q           : Real_Array (0..numElem);
+      q_linear    : Real_Array (0..numElem);
+      q_quadratic : Real_Array (0..numElem);
 
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
       --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
       --x    std::vector<Real_t> m_delv ;  /* m_vnew - m_v */
       --x    std::vector<Real_t> m_vdov ;  /* volume derivative over volume */
-      relative_volume               : Real_t_Vector (0..numElem);
-      reference_volume              : Real_t_Vector (0..numElem);
-      new_relative_volume           : Real_t_Vector (0..numElem);
-      relative_volume_change        : Real_t_Vector (0..numElem);
-      volume_derivative_over_volume : Real_t_Vector (0..numElem);
+      relative_volume               : Real_Array (0..numElem);
+      reference_volume              : Real_Array (0..numElem);
+      new_relative_volume           : Real_Array (0..numElem);
+      relative_volume_delta         : Real_Array (0..numElem);
+      volume_derivative_over_volume : Real_Array (0..numElem);
 
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
-      characteristic_length : Real_t_Vector (0..numElem);
+      characteristic_length : Real_Array (0..numElem);
 
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
-      sound_speed : Real_t_Vector (0..numElem);
+      sound_speed : Velocity_Array (0..numElem);
 
       --x    std::vector<Real_t> m_elemMass ;  /* mass */
-      elemMass : Real_t_Vector (0..numElem);
+      --    // Element mass
+      elemMass : Mass_Array (0..numElem);
+   end record;
+
+   type Variables_Record is record
+      ---    // Variables to keep track of timestep, simulation time, and cycle
+      --x    Real_t  m_dtcourant ;         // courant constraint
+      --x    Real_t  m_dthydro ;           // volume change constraint
+      --x    Int_t   m_cycle ;             // iteration count for simulation
+      --x    Real_t  m_dtfixed ;           // fixed time increment
+      --x    Real_t  m_time ;              // current time
+      --x    Real_t  m_deltatime ;         // variable time increment
+      --x    Real_t  m_deltatimemultlb ;
+      --x    Real_t  m_deltatimemultub ;
+      --x    Real_t  m_dtmax ;             // maximum allowable time increment
+      --x    Real_t  m_stoptime ;          // end time for simulation
+      dtcourant       : Real_Type;
+      dthydro         : Real_Type;
+      cycle           : Int_t;
+      dtfixed         : Real_Type;
+      time            : Real_Type;
+      deltatime       : Real_Type;
+      deltatimemultlb : Real_Type;
+      deltatimemultub : Real_Type;
+      dtmax           : Real_Type;
+      stoptime        : Real_Type;
+
+      --x    Int_t   m_numRanks ;
+      numRanks : Int_t;
+
+      --x    Index_t m_colLoc ;
+      --x    Index_t m_rowLoc ;
+      --x    Index_t m_planeLoc ;
+      --x    Index_t m_tp ;
+      colLoc   : Index_Type;
+      rowLoc   : Index_Type;
+      planeLoc : Index_Type;
+      tp       : Index_Type;
+   end record;
+
+   type Parameters_Record is record
+      ---    // Parameters
 
       ---    // Cutoffs (treat as constants)
+
       ---    const Real_t  m_e_cut ;             // energy tolerance
       ---    const Real_t  m_p_cut ;             // pressure tolerance
       ---    const Real_t  m_q_cut ;             // q tolerance
       ---    const Real_t  m_v_cut ;             // relative volume tolerance
       ---    const Real_t  m_u_cut ;             // velocity tolerance
-      energy_tolerance          : Real_t;
-      pressure_tolerance        : Real_t;
-      q_tolerance               : Real_t;
-      relative_volume_tolerance : Real_t;
-      velocity_tolerance        : Real_t;
+      energy_tolerance          : Joules;
+      pressure_tolerance        : Real_Type;
+      q_tolerance               : Real_Type;
+      relative_volume_tolerance : Real_Type;
+      velocity_tolerance        : Meters_Per_Second;
 
       ---    // Other constants (usually setable, but hardcoded in this proxy app)
 
@@ -699,68 +610,33 @@ private
       ---    const Real_t  m_emin ;              // energy floor
       ---    const Real_t  m_dvovmax ;           // maximum allowable volume change
       ---    const Real_t  m_refdens ;           // reference density
-      hgcoef             : Real_t;
-      ss4o3              : Real_t;
-      qstop              : Real_t;
-      monoq_max_slope    : Real_t;
-      monoq_limiter_mult : Real_t;
-      qlc_monoq          : Real_t;
-      qqc_monoq          : Real_t;
-      qqc                : Real_t;
-      eosvmax            : Real_t;
-      eosvmin            : Real_t;
-      pmin               : Real_t;
-      dvovmax            : Real_t;
-      refdens            : Real_t;
+      hgcoef             : Real_Type;
+      ss4o3              : Real_Type;
+      qstop              : Real_Type;
+      monoq_max_slope    : Real_Type;
+      monoq_limiter_mult : Real_Type;
+      qlc_monoq          : Real_Type;
+      qqc_monoq          : Real_Type;
+      qqc                : Real_Type;
+      eosvmax            : Real_Type;
+      eosvmin            : Real_Type;
+      pmin               : Real_Type;
+      dvovmax            : Real_Type;
+      refdens            : Real_Type;
 
-      ---    // Variables to keep track of timestep, simulation time, and cycle
-      --x    Real_t  m_dtcourant ;         // courant constraint
-      --x    Real_t  m_dthydro ;           // volume change constraint
-      --x    Int_t   m_cycle ;             // iteration count for simulation
-      --x    Real_t  m_dtfixed ;           // fixed time increment
-      --x    Real_t  m_time ;              // current time
-      --x    Real_t  m_deltatime ;         // variable time increment
-      --x    Real_t  m_deltatimemultlb ;
-      --x    Real_t  m_deltatimemultub ;
-      --x    Real_t  m_dtmax ;             // maximum allowable time increment
-      --x    Real_t  m_stoptime ;          // end time for simulation
-      dtcourant       : Real_t;
-      dthydro         : Real_t;
-      cycle           : Int_t;
-      dtfixed         : Real_t;
-      time            : Real_t;
-      deltatime       : Real_t;
-      deltatimemultlb : Real_t;
-      deltatimemultub : Real_t;
-      dtmax           : Real_t;
-      stoptime        : Real_t;
-
-      --x    Int_t   m_numRanks ;
-      numRanks : Int_t;
-
-      --x    Index_t m_colLoc ;
-      --x    Index_t m_rowLoc ;
-      --x    Index_t m_planeLoc ;
-      --x    Index_t m_tp ;
-      colLoc   : Index_t;
-      rowLoc   : Index_t;
-      planeLoc : Index_t;
-      tp       : Index_t;
 
       --x    Index_t m_sizeX ;
       --x    Index_t m_sizeY ;
       --x    Index_t m_sizeZ ;
+      size : XYZ_Size_Array;
       --x    Index_t m_numElem ;
       --x    Index_t m_numNode ;
-      size : XYZ_Index_Array;
-      -- Moved to discriminant:
---        numElem : Index_t;
---        numNode : Index_t;
+      -- Moved to discriminant.
 
       --x    Index_t m_maxPlaneSize ;
       --x    Index_t m_maxEdgeSize ;
-      maxPlaneSize : Index_t;
-      maxEdgeSize  : Index_t;
+      maxPlaneSize : Index_Type;
+      maxEdgeSize  : Index_Type;
 
    --    // OMP hack
    --    Index_t *m_nodeElemStart ;
@@ -770,21 +646,30 @@ private
       --x    Index_t m_rowMin, m_rowMax;
       --x    Index_t m_colMin, m_colMax;
       --x    Index_t m_planeMin, m_planeMax ;
-      rowMin   : Index_t;
-      rowMax   : Index_t;
-      colMin   : Index_t;
-      colMax   : Index_t;
-      planeMin : Index_t;
-      planeMax : Index_t;
+      rowMin   : Index_Type;
+      rowMax   : Index_Type;
+      colMin   : Index_Type;
+      colMax   : Index_Type;
+      planeMin : Index_Type;
+      planeMax : Index_Type;
+   end record;
 
-      --x } ;
+   type Domain_Record
+     (numNode : Node_Index_Type;
+      numElem : Element_Index_Type;
+      numReg  : Region_Index_Type)
+   is record
+      nodes      : Nodes_Record (numNode);
+      elements   : Elements_Record (numElem, numReg);
+      variables  : Variables_Record;
+      parameters : Parameters_Record;
    end record;
 
    -- typedef Real_t &(Domain::* Domain_member )(Index_t) ;
    -- (Address of (pointer to) a Domain class function (accessor):
    --   that takes an Index_t and returns the Real_t Domain component value)
-   type Accessor_access is access function (Index : in Index_t) return Real_t;
-   type Domain_member is access all Real_t;
+   type Accessor_access is access function (Index : in Index_Type) return Real_Type;
+   type Domain_member is access all Real_Type;
 
    --- /******************************************/
 
@@ -792,10 +677,12 @@ private
 
    --x static inline
    --x void TimeIncrement(Domain& domain)
-   procedure TimeIncrement (domain : not null access Domain_Record);
+   procedure TimeIncrement (domain : not null access Domain_Record)
+   with Inline;
 
    --x static inline
    --x void LagrangeLeapFrog(Domain& domain)
-   procedure LagrangeLeapFrog (domain : not null access Domain_Record);
+   procedure LagrangeLeapFrog (domain : not null access Domain_Record)
+   with Inline;
 
 end LULESH;
