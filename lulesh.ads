@@ -70,27 +70,22 @@ package LULESH is
    --     type Real_Array_Access is access Real_Array;
    type Index_Array is array (Index_Type range <>) of Index_Type;
 
-   type XYZ_Names           is (X, Y, Z);
-   subtype Dimensions       is XYZ_Names;
-   subtype Coordinate_Names is XYZ_Names;
+   type Dimension_Type           is (X, Y, Z);
+   subtype Coordinate_Names is Dimension_Type;
 
    type XEZ_Type is (Xi, Eta, Zeta);
    Et : constant XEZ_Type := Eta;
    Ze : constant XEZ_Type := Zeta;
 
 --     type XYZ_Real_Array is array
---       (XYZ_Names) of Real_Type;
+--       (Dimension_Type) of Real_Type;
 
 --     type Bisect_XYZ_Real_Array is array
---       (Bisect_Range, XYZ_Names) of Real_Type;
+--       (Bisect_Range, Dimension_Type) of Real_Type;
    subtype NodesPerElement_Index_Array is
      Index_Array (NodesPerElement_Index_Type);
    type NodesPerElement_Index_Array_Array is array
      (Index_Type range <>) of NodesPerElement_Index_Array;
---     type NodesPerElement_XYZ_Real_Array is array
---       (NodesPerElement_Index_Type, XYZ_Names) of Real_Type;
---     type NodesPerElement_XYZ_Real_Array_Array is array
---       (NodesPerElement_Index_Type) of XYZ_Real_Array;
    type Face_NodesPerFace_NodesPerElement_Array is array
      (Face_Index_Type, NodesPerFace_Index_Type) of NodesPerElement_Index_Type;
 --     subtype NodesPerFace_Real_Array is
@@ -98,14 +93,14 @@ package LULESH is
 --     type NodesPerFace_XYZ_Real_Array_Array is array
 --       (NodesPerFace_Index_Type) of XYZ_Real_Array;
 --     type XYZ_NodesPerElement_Real_Array is array
---       (XYZ_Names, NodesPerElement_Index_Type) of Real_Type;
+--       (Dimension_Type, NodesPerElement_Index_Type) of Real_Type;
 --     type XYZ_XEZ_Real_Array is array
---       (XYZ_Names, XEZ_Type) of Real_Type;
+--       (Dimension_Type, XEZ_Type) of Real_Type;
 
 
 
    type Domain_Record
-     (numNode : Node_Index_Type;
+     (numNode : Node_Index_Type; -- NOT numElem * 8
       numElem : Element_Index_Type;
       numReg  : Region_Index_Type)
    is private;
@@ -386,31 +381,37 @@ private
 
    subtype Size_Type is Index_Type;
 
-   type Gradient_Magnitude           is new Real_Type;
-   type Grams                        is new Real_Type;
-   type Joules                       is new Real_Type;
-   type Meters                       is new Real_Type;
-   type Meters_Per_Second            is new Real_Type;
-   type Meters_Per_Second_Per_Second is new Real_Type;
-   type Newtons                      is new Real_Type;
+   type Acceleration_Type  is new Real_Type;
+   type Distance_Type      is new Real_Type;
+   type Duration_Type      is new Real_Type;
+   type Energy_Type        is new Real_Type;
+   type Force_Type         is new Real_Type;
+   type Gradient_Magnitude is new Real_Type;
+   type Mass_Type          is new Real_Type;
+   subtype Time_Type       is Duration_Type;
+   type Velocity_Type      is new Real_Type;
+   type Volume_Type        is new Real_Type;
 
-   type Acceleration_Vector is array (XYZ_Names) of Meters_Per_Second_Per_Second;
-   type Force_Vector        is array (XYZ_Names) of Newtons;
+   type Acceleration_Vector is array (Dimension_Type) of Acceleration_Type;
+   type Force_Vector        is array (Dimension_Type) of Force_Type;
    type Gradient_Type       is array (XEZ_Type)  of Gradient_Magnitude;
-   type Location_Type       is array (XYZ_Names) of Meters;
-   type XYZ_Size_Array      is array (XYZ_Names) of Size_Type;
-   type Strain_Vector       is array (XYZ_Names) of Newtons;
-   type Velocity_Vector     is array (XYZ_Names) of Meters_Per_Second;
+   type Location_Type       is array (Dimension_Type) of Distance_Type;
+   type XYZ_Size_Array      is array (Dimension_Type) of Size_Type;
+   type Strain_Vector       is array (Dimension_Type) of Force_Type;
+   type Symmetry_Type       is array (Dimension_Type) of Real_Type;
+   type Velocity_Vector     is array (Dimension_Type) of Velocity_Type;
 
    type Acceleration_Array  is array (Index_Type range <>) of Acceleration_Vector;
    type Force_Array         is array (Index_Type range <>) of Force_Vector;
    type Gradient_Array      is array (Index_Type range <>) of Gradient_Type;
    type Location_Array      is array (Index_Type range <>) of Location_Type;
-   type Mass_Array          is array (Index_Type range <>) of Grams;
+   type Mass_Array          is array (Index_Type range <>) of Mass_Type;
    type Strain_Array        is array (Index_Type range <>) of Strain_Vector;
+   type Symmetry_Array      is array (Index_Type range <>) of Symmetry_Type;
    type Velocity_Array      is array (Index_Type range <>) of Velocity_Vector;
 
---     type NodesPerElement_Location_Array is array (Index_Type range <>) of Location_Type;
+   type NodesPerElement_Location_Array is new Location_Array
+     (NodesPerElement_Index_Type);
 
    package Element_Index_Vectors is
      new Ada.Containers.Vectors
@@ -426,25 +427,25 @@ private
       --x    std::vector<Real_t> m_x ;  /* coordinates */
       --x    std::vector<Real_t> m_y ;
       --x    std::vector<Real_t> m_z ;
-      location : Location_Array (0..numNode);
+      location : Location_Array (0..numNode-1);
 
       --x    std::vector<Real_t> m_xd ; /* velocities */
       --x    std::vector<Real_t> m_yd ;
       --x    std::vector<Real_t> m_zd ;
-      velocity : Velocity_Array (0..numNode);
+      velocity : Velocity_Array (0..numNode-1);
 
       --x    std::vector<Real_t> m_xdd ; /* accelerations */
       --x    std::vector<Real_t> m_ydd ;
       --x    std::vector<Real_t> m_zdd ;
-      acceleration : Acceleration_Array (0..numNode);
+      acceleration : Acceleration_Array (0..numNode-1);
 
       --x    std::vector<Real_t> m_fx ;  /* forces */
       --x    std::vector<Real_t> m_fy ;
       --x    std::vector<Real_t> m_fz ;
-      force : Force_Array (0..numNode);
+      force : Force_Array (0..numNode-1);
 
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
-      mass : Mass_Array (0..numNode);
+      mass : Mass_Array (0..numNode-1);
 
       --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
       --x    std::vector<Index_t> m_symmY ;
@@ -452,6 +453,7 @@ private
 --        symmX : Index_Vector;
 --        symmY : Index_Vector;
 --        symmZ : Index_Vector;
+      symmetry : Symmetry_Array (0..numNode-1);
 
    end record;
 
@@ -508,7 +510,7 @@ private
       position_gradient : Gradient_Array (0..numElem);
 
       --x    std::vector<Real_t> m_e ;   /* energy */
-      energy : Joules;
+      energy : Energy_Type;
 
       --x    std::vector<Real_t> m_p ;   /* pressure */
       --x    std::vector<Real_t> m_q ;   /* q */
@@ -554,16 +556,16 @@ private
       --x    Real_t  m_deltatimemultub ;
       --x    Real_t  m_dtmax ;             // maximum allowable time increment
       --x    Real_t  m_stoptime ;          // end time for simulation
-      dtcourant       : Real_Type;
-      dthydro         : Real_Type;
+      dtcourant       : Duration_Type;
+      dthydro         : Duration_Type;
       cycle           : Int_t;
-      dtfixed         : Real_Type;
-      time            : Real_Type;
-      deltatime       : Real_Type;
+      dtfixed         : Duration_Type;
+      time            : Time_Type;
+      deltatime       : Duration_Type;
       deltatimemultlb : Real_Type;
       deltatimemultub : Real_Type;
-      dtmax           : Real_Type;
-      stoptime        : Real_Type;
+      dtmax           : Time_Type;
+      stoptime        : Time_Type;
 
       --x    Int_t   m_numRanks ;
       numRanks : Int_t;
@@ -588,11 +590,11 @@ private
       ---    const Real_t  m_q_cut ;             // q tolerance
       ---    const Real_t  m_v_cut ;             // relative volume tolerance
       ---    const Real_t  m_u_cut ;             // velocity tolerance
-      energy_tolerance          : Joules;
+      energy_tolerance          : Energy_Type;
       pressure_tolerance        : Real_Type;
       q_tolerance               : Real_Type;
       relative_volume_tolerance : Real_Type;
-      velocity_tolerance        : Meters_Per_Second;
+      velocity_tolerance        : Velocity_Type;
 
       ---    // Other constants (usually setable, but hardcoded in this proxy app)
 
@@ -677,12 +679,12 @@ private
 
    --x static inline
    --x void TimeIncrement(Domain& domain)
-   procedure TimeIncrement (domain : not null access Domain_Record)
+   procedure TimeIncrement (domain : access Domain_Record)
    with Inline;
 
    --x static inline
    --x void LagrangeLeapFrog(Domain& domain)
-   procedure LagrangeLeapFrog (domain : not null access Domain_Record)
+   procedure LagrangeLeapFrog (domain : access Domain_Record)
    with Inline;
 
 end LULESH;
