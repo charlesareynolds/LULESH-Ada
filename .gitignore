@@ -1,6 +1,3 @@
-*.ali
-*.obj
-*.exe
-*-loc.xml
-auto.cgpr
 gnatinspect.db
+obj/*.*
+obj_c/*.*
