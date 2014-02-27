@@ -6,15 +6,15 @@ package LULESH.Init is
    --x           Index_t nx, Int_t tp, Int_t nr, Int_t balance, Int_t cost);
    function Create
      (numRanks : in Int_t;
-      colLoc   : in Index_t;
-      rowLoc   : in Index_t;
-      planeLoc : in Index_t;
-      nx       : in Index_t;
+      colLoc   : in Index_Type;
+      rowLoc   : in Index_Type;
+      planeLoc : in Index_Type;
+      nx       : in Index_Type;
       tp       : in Int_t;
       nr       : in Int_t;
       balance  : in Int_t;
       cost     : in Int_t)
-      return Access_Domain;
+      return Domain_Record;
 
    --- // lulesh-init
 
