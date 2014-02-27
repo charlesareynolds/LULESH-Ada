@@ -4,10 +4,10 @@ project LULESH is
 
    for Languages use ("Ada");
    for Object_Dir use "obj";
-   for Main use ("LULESH-Main.adb");
+   for Main use ("LULESH-Main", "Test_Optimization");
 
    package Compiler is
-      for Default_Switches ("ada") use ("-gnato", "-fstack-check", "-gnata", "-g", "-gnat12");
+      for Default_Switches ("ada") use ("-gnato", "-fstack-check", "-gnata", "-g", "-gnat12", "-O3");
    end Compiler;
 
    package Linker is
