@@ -13,7 +13,7 @@ procedure Lulesh.main is
    --x    Int_t numRanks ;
    --x    Int_t myRank ;
    --x    struct cmdLineOpts opts;
-   locDom   : Access_Domain;
+   locDom   : Domain_Access;
    numRanks : Int_t;
    myRank   : Int_t;
    opts     : LULESH.Util.cmdLineOpts;
@@ -50,7 +50,7 @@ begin
    --x    opts.cost = 1;
    opts :=
      (its      => 9999999,
-      nx       => 30,
+      side_length       => 30,
       numReg   => 11,
       numFiles => (numRanks+10)/9,
       showProg => False,
@@ -78,10 +78,10 @@ begin
    --x       printf("See help (-h) for more options\n\n");
    --x    }
    if (myRank = 0 and not opts.quiet) then
-      ATI.Put_Line ("Running problem size " & opts.nx'Img & "^3 per domain until completion");
+      ATI.Put_Line ("Running problem size " & opts.side_length'Img & "^3 per domain until completion");
       ATI.Put_Line ("Num processors: " & numRanks'Img);
       ATI.Put_Line ("Total number of elements: " &
-                      Int_t'Image(numRanks*opts.nx*opts.nx*opts.nx));
+                      Int_t'Image(numRanks*opts.side_length*opts.side_length*opts.side_length));
       ATI.Put_Line ("");
       ATI.Put_Line ("To run other sizes, use -s <integer>.");
       ATI.Put_Line ("To run a fixed number of iterations, use -i <integer>.");
@@ -117,7 +117,7 @@ begin
          colLoc   => Index_Type (col),
          rowLoc   => Index_Type (row),
          planeLoc => Index_Type (plane),
-         nx       => Index_Type (opts.nx),
+         side_length       => Index_Type (opts.side_length),
          tp       => side,
          nr       => opts.numReg,
          balance  => opts.balance,
@@ -212,7 +212,7 @@ begin
    --x    }
    if myRank = 0 and not opts.quiet then
       LULESH.Util.VerifyAndWriteFinalOutput
-        (elapsed_timeG, locDom, opts.nx, numRanks);
+        (elapsed_timeG, locDom, opts.side_length, numRanks);
    end if;
 
    -- #if USE_MPI

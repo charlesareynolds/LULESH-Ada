@@ -52,18 +52,25 @@ package LULESH is
    --x typedef int    Index_t ; // array subscript and loop index
    --x typedef real8  Real_t ;  // floating point representation
    --x typedef int    Int_t ;   // integer representation
-   type real4      is new Interfaces.IEEE_Float_32;
-   type real8      is new Interfaces.IEEE_Float_64;
-   type real10     is new Interfaces.IEEE_Extended_Float;
-   type Index_Type is new Natural;
-   type Real_Type  is new real8;
-   type Int_t      is new Integer;
-
+   type real4        is new Interfaces.IEEE_Float_32;
+   type real8        is new Interfaces.IEEE_Float_64;
+   type real10       is new Interfaces.IEEE_Extended_Float;
+   type Index_Type   is new Natural;
+   type Real_Type    is new real8;
+   type Int_t        is new Integer;
+   type Balance_Type is new Natural;
+   type Cost_Type    is new Natural;
    ---------------------------------------
 
    type Element_Index_Type         is new Index_Type;
    type Region_Index_Type          is new Index_Type;
    type Bisect_Range               is new Index_Type range 0..1;
+   type Domain_Index_Type          is new Index_Type;
+
+   type Rank_Type              is new Natural;
+   subtype Process_ID_Type     is Rank_Type;
+   subtype Rank_Count_Range    is Rank_Type range 1..Rank_Type'Last
+   subtype Process_Count_Range is Rank_Count_Range;
 
    --- Looking down on element:
    --- 1-2-3-4 are nodes going CCW on bottom.
@@ -80,8 +87,11 @@ package LULESH is
    type Real_Array is array (Index_Type range <>) of Real_Type;
    --     type Real_Array_Access is access Real_Array;
    type Index_Array is array (Index_Type range <>) of Index_Type;
-   type Element_Index_Array is array (Index_Type range <>) of Element_Index_Type;
-   type Access_Element_Index_Array is access Element_Index_Array;
+   type Element_Index_Array is array (Element_Index_Type range <>) of Element_Index_Type;
+   type Element_Index_Array_Access is access Element_Index_Array;
+
+   type Region_Bin_End_Array is array (Region_Index_Type range <>) of Cost_Type;
+   type Region_Bin_End_Array_Access is access Region_Bin_End_Array;
 
    --- Cartesian coordinates:
    --- X is positive in direction node 4 -> node 1
@@ -109,7 +119,7 @@ package LULESH is
      (Face_Index_Type, NodesPerFace_Index_Type) of NodesPerElement_Index_Type;
 
    type Domain_Record is private;
-   type Access_Domain is access Domain_Record;
+   type Domain_Access is access Domain_Record;
 
    ---------------------------------------
 
@@ -284,37 +294,37 @@ package LULESH is
 
    --   private:
 
-   type Acceleration_Type  is new Real_Type;
-   type Duration_Type      is new Real_Type;
-   type Energy_Type        is new Real_Type;
-   type Force_Type         is new Real_Type;
-   type Gradient_Magnitude is new Real_Type;
-   type Length_Type        is new Real_Type;
-   type Mass_Type          is new Real_Type;
-   type Pressure_Type      is new Real_Type;
-   type Sig_Magnitude      is new Real_Type;
-   type Time_Type          is new Real_Type;
-   type Velocity_Type      is new Real_Type;
-   type Volume_Type        is new Real_Type;
+   type Acceleration_Type is new Real_Type;
+   type Duration_Type          is new Real_Type;
+   type Energy_Type            is new Real_Type;
+   type Force_Type        is new Real_Type;
+   type Gradient_Type     is new Real_Type;
+   type Length_Type            is new Real_Type;
+   type Mass_Type              is new Real_Type;
+   type Pressure_Type          is new Real_Type;
+--     type Sig_Type          is new Real_Type;
+   type Time_Type              is new Real_Type;
+   type Velocity_Type          is new Real_Type;
+   type Volume_Type            is new Real_Type;
 
    subtype Size_Type       is Element_Index_Type;
 
    type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration_Type;
    type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;
    type Force_Vector         is array (Cartesian_Axes) of Force_Type;
-   type Gradient_Type        is array (Natural_Axes)   of Gradient_Magnitude;
-   type Coordinate_Type      is array (Cartesian_Axes) of Length_Type;
-   type Sig_Type             is array (Cartesian_Axes) of Sig_Magnitude;
+   type Gradient_Vector        is array (Natural_Axes)   of Gradient_Type;
+   type Coordinate_Vector      is array (Cartesian_Axes) of Length_Type;
+--     type Sig_Vector             is array (Cartesian_Axes) of Sig_Type;
    type Strain_Vector        is array (Cartesian_Axes) of Force_Type;
    type Velocity_Vector      is array (Cartesian_Axes) of Velocity_Type;
 
 --     type Acceleration_Array is array (Node_Index_Type range <>) of Acceleration_Vector;
 --     type Force_Array        is array (Node_Index_Type range <>) of Force_Type;
 --     type Force_Vector_Array is array (Node_Index_Type range <>) of Force_Vector;
---     type Gradient_Array     is array (Node_Index_Type range <>) of Gradient_Type;
-   type Coordinate_Array   is array (Node_Index_Type range <>) of Coordinate_Type;
+--     type Gradient_Array     is array (Node_Index_Type range <>) of Gradient_Vector;
+   type Coordinate_Array   is array (Node_Index_Type range <>) of Coordinate_Vector;
 --     type Mass_Array         is array (Node_Index_Type range <>) of Mass_Type;
---     type Sig_Array          is array (Node_Index_Type range <>) of Sig_Type;
+--     type Sig_Array          is array (Node_Index_Type range <>) of Sig_Vector;
 --     type Strain_Array       is array (Node_Index_Type range <>) of Strain_Vector;
 --     type Velocity_Array     is array (Node_Index_Type range <>) of Velocity_Vector;
 --
@@ -345,35 +355,35 @@ package LULESH is
 --     type Element_To_Region_Array is array (Element_Index_Type range <>)
 --       of Region_Index_Type;
 --
+   type Symmetry_Node_Array is array (Cartesian_Axes) of Node_Index_Type;
+
    type Node_Record is record
       --x    std::vector<Real_t> m_x ;  /* coordinates */
       --x    std::vector<Real_t> m_y ;
       --x    std::vector<Real_t> m_z ;
-      coordinate : Coordinate_Type;
+      coordinate          : Coordinate_Vector;
+      --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
+      --x    std::vector<Index_t> m_symmY ;
+      --x    std::vector<Index_t> m_symmZ ;
+      symmetry_plane_nodes : Symmetry_Node_Array;
       --x    std::vector<Real_t> m_xd ; /* velocities */
       --x    std::vector<Real_t> m_yd ;
       --x    std::vector<Real_t> m_zd ;
-      velocity : Velocity_Vector;
+      velocity            : Velocity_Vector;
       --x    std::vector<Real_t> m_xdd ; /* accelerations */
       --x    std::vector<Real_t> m_ydd ;
       --x    std::vector<Real_t> m_zdd ;
-      acceleration : Acceleration_Vector;
+      acceleration        : Acceleration_Vector;
       --x    std::vector<Real_t> m_fx ;  /* forces */
       --x    std::vector<Real_t> m_fy ;
       --x    std::vector<Real_t> m_fz ;
-      force : Force_Vector;
+      force               : Force_Vector;
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
-      mass : Mass_Type;
+      mass                : Mass_Type;
    end record;
    type Node_Array is array (Node_Index_Type range <>) of Node_Record;
    type Node_Array_Access is access Node_Array;
 
-   type Symmetry_Plane_Nodesets is record
-      --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
-      --x    std::vector<Index_t> m_symmY ;
-      --x    std::vector<Index_t> m_symmZ ;
-      coordinate : coordinate_Type;
-   end record;
 
    type MP_Type is (M, P);
    type Connectivity_Array is
@@ -406,12 +416,12 @@ package LULESH is
       --x    std::vector<Real_t> m_delv_xi ;    /* velocity gradient -- temporary */
       --x    std::vector<Real_t> m_delv_eta ;
       --x    std::vector<Real_t> m_delv_zeta ;
-      velocity_gradient : Gradient_Type;
+      velocity_gradient : Gradient_Vector;
       ---    // Position gradient - temporary
       --x    std::vector<Real_t> m_delx_xi ;    /* coordinate gradient -- temporary */
       --x    std::vector<Real_t> m_delx_eta ;
       --x    std::vector<Real_t> m_delx_zeta ;
-      position_gradient : Gradient_Type;
+      position_gradient : Gradient_Vector;
       --x    std::vector<Real_t> m_e ;   /* energy */
       energy : Energy_Type;
       --x    std::vector<Real_t> m_p ;   /* pressure */
@@ -447,10 +457,9 @@ package LULESH is
 
    type Region_Record is record
       --x    Index_t *m_regElemSize ;   // Size of region sets
-      --- regElemSize is unneeded when regElemList is an array of vectors,
-      --- which know their own length.
+      size     : Element_Index_Type;
       --x    Index_t **m_regElemlist ;  // region indexset
-      region_elements   : Access_Element_Index_Array;
+      elements : Element_Index_Array_Access;
    end record;
    type Region_Array is array (Region_Index_Type range <>) of Region_Record;
    type Region_Array_Access is access Region_Array;
@@ -467,14 +476,14 @@ package LULESH is
       --x    Real_t  m_deltatimemultub ;
       --x    Real_t  m_dtmax ;             // maximum allowable time increment
       --x    Real_t  m_stoptime ;          // end time for simulation
-      dtcourant       : Real_Type;
-      dthydro         : Volume_Type;
+      dtcourant       : Duration_Type;
+      dthydro         : Duration_Type;
       cycle           : Int_t;
       dtfixed         : Duration_Type;
       time            : Time_Type;
       deltatime       : Duration_Type;
-      deltatimemultlb : Time_Type;
-      deltatimemultub : Time_Type;
+      deltatimemultlb : Real_Type;
+      deltatimemultub : Real_Type;
       dtmax           : Duration_Type;
       stoptime        : Time_Type;
 
@@ -485,9 +494,9 @@ package LULESH is
       --x    Index_t m_rowLoc ;
       --x    Index_t m_planeLoc ;
       --x    Index_t m_tp ;
-      colLoc   : Index_Type;
-      rowLoc   : Index_Type;
-      planeLoc : Index_Type;
+      colLoc   : Element_Index_Type;
+      rowLoc   : Element_Index_Type;
+      planeLoc : Element_Index_Type;
       tp       : Index_Type;
    end record;
 
@@ -538,7 +547,7 @@ package LULESH is
       volume_delta_max   : Volume_Type;
       reference_density  : Real_Type;
       --x    Int_t    m_cost; //imbalance cost
-      imbalance_cost    : Int_t;
+      imbalance_cost     : Cost_Type;
 
       --x    Index_t m_sizeX ;
       --x    Index_t m_sizeY ;

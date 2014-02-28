@@ -1,4 +1,3 @@
-with LULESH.Par;
 --x #include <math.h>
 --x #if USE_MPI
 --x # include <mpi.h>
@@ -13,8 +12,57 @@ with LULESH.Par;
 --x #include <cstdlib>
 --x #include "lulesh.h"
 
+with LULESH.Par;
+with Ada.Numerics.Float_Random;
 
 package body LULESH.Init is
+
+   package Random_Selection is
+
+      -- Returns an integer between Min and Max:
+      function Choose
+        (Min : in Integer;
+         Max : in integer)
+         return Integer
+        with
+          post => (Choose'Result in Min..Max);
+
+      -- Returns an integer between 0 and Modulo - 1:
+      function Choose_Rem
+        (Modulo : in Integer)
+         return Integer is
+        (Choose (0, Modulo-1));
+
+   end Random_Selection;
+
+   package body Random_Selection is
+      package ANFR renames Ada.Numerics.Float_Random;
+      Generator : ANFR.Generator;
+      function Choose
+        (Min : in Integer;
+         Max : in integer)
+         return Integer is
+      begin
+         return Integer(Float(ANFR.Random (Generator)) * Float (Max - Min)) + Min;
+      end Choose;
+   begin
+      ANFR.Reset(Generator);
+   end Random_Selection;
+
+   function Choose_Rem
+     (Modulo : in Integer)
+      return Element_Index_Type is
+     (Element_Index_Type(Random_Selection.Choose_Rem(Modulo)));
+
+   function Choose_Rem
+     (Modulo : in Integer)
+      return Int_t is
+     (Int_t(Random_Selection.Choose_Rem(Modulo)));
+
+   function Choose_Rem
+     (Modulo : in Cost_Type)
+      return Cost_Type is
+     (Cost_Type(Random_Selection.Choose_Rem(Integer(Modulo))));
 
    ---    public:
 
@@ -123,22 +171,22 @@ package body LULESH.Init is
    -- EXPORTED:
    ------------
    function Create
-     (numRanks : in Int_t;
-      colLoc   : in Index_Type;
-      rowLoc   : in Index_Type;
-      planeLoc : in Index_Type;
-      nx       : in Index_Type;
-      tp       : in Index_Type;
-      nr       : in Int_t;
-      balance  : in Int_t;
-      cost     : in Int_t)
+     (numRanks    : in Int_t;
+      colLoc      : in Element_Index_Type;
+      rowLoc      : in Element_Index_Type;
+      planeLoc    : in Element_Index_Type;
+      side_length : in Element_Index_Type;
+      tp          : in Index_Type;
+      nr          : in Region_Index_Type;
+      balance     : in Balance_Type;
+      cost        : in Cost_Type)
       return Domain_Record
    is
       this : Domain_Record;
       --x    Index_t edgeElems = nx ;
       --x    Index_t edgeNodes = edgeElems+1 ;
-      edgeElems : constant Element_Index_Type := Element_Index_Type(nx);
-      edgeNodes : constant Node_Index_Type := Node_Index_Type(nx) + 1;
+      edgeElems : constant Element_Index_Type := side_length;
+      edgeNodes : constant Node_Index_Type := Node_Index_Type(side_length) + 1;
    begin
 
       --x    m_e_cut(Real_t(1.0e-7)),
@@ -220,7 +268,7 @@ package body LULESH.Init is
       this.nodes := new Node_Array (0..this.numNode-1);
 
       --x    SetupCommBuffers(edgeNodes);
-      SetupCommBuffers(edgeNodes);
+      SetupCommBuffers(this, edgeNodes);
 
       --x    // Basic Field Initialization
       --x    for (Index_t i=0; i<numElem(); ++i) {
@@ -260,7 +308,7 @@ package body LULESH.Init is
       end loop;
 
       --x    BuildMesh(nx, edgeNodes, edgeElems);
-      BuildMesh(this, nx, edgeNodes, edgeElems);
+      BuildMesh(this, side_length, edgeNodes, edgeElems);
 
       -- #if _OPENMP
       --    SetupThreadSupportStructures();
@@ -273,13 +321,13 @@ package body LULESH.Init is
       ---    // throughout the run, but could be changed every cycle to
       ---    // simulate effects of ALE on the lagrange solver
       --x    CreateRegionIndexSets(nr, balance);
-      CreateRegionIndexSets(nr, balance);
+      CreateRegionIndexSets(this, nr, balance);
       ---    // Setup symmetry nodesets
       --x    SetupSymmetryPlanes(edgeNodes);
-      SetupSymmetryPlanes(edgeNodes);
+      SetupSymmetryPlanes(this, edgeNodes);
       ---    // Setup element connectivities
       --x    SetupElementConnectivities(edgeElems);
-      SetupElementConnectivities(edgeElems);
+      SetupElementConnectivities(this,edgeElems);
       ---    // Setup symmetry planes and free surface boundary arrays
       --x    SetupBoundaryConditions(edgeElems);
       SetupBoundaryConditions(this, edgeElems);
@@ -376,9 +424,8 @@ package body LULESH.Init is
       --x    }
       declare
          ebase : constant Energy_Type := 3.948746e+7;
-         scale : constant Real_Type   := Real_Type(nx*Index_Type(this.variables.tp))/45.0;
-         einit : constant Energy_Type :=
-           ebase*Energy_Type(scale**3);
+         scale : constant Real_Type   := Real_Type(side_length*Index_Type(this.variables.tp))/45.0;
+         einit : constant Energy_Type := ebase*Energy_Type(scale**3);
       begin
          if (this.variables.rowLoc
              + this.variables.colLoc
@@ -389,7 +436,7 @@ package body LULESH.Init is
          --x    deltatime() = (Real_t(.5)*cbrt(volo(0)))/sqrt(Real_t(2.0)*einit);
          this.variables.deltatime := Duration_Type
            ((0.5*cbrt(real10(this.elements(0).reference_volume)))/
-             sqrt(2.0*real10(einit)));
+              sqrt(2.0*real10(einit)));
       end;
       --x } // End constructor
       return this;
@@ -401,30 +448,30 @@ package body LULESH.Init is
    -- Domain::BuildMesh(Int_t nx, Int_t edgeNodes, Int_t edgeElems)
    -- {
    procedure BuildMesh
-     (this      : in out Domain_Record;
-      nx        : in Index_Type;
-      edgeNodes : in Node_Index_Type;
-      edgeElems : in Element_Index_Type)
+     (this        : in out Domain_Record;
+      side_length : in Element_Index_Type;
+      edgeNodes   : in Node_Index_Type;
+      edgeElems   : in Element_Index_Type)
    is
-   --x   Index_t meshEdgeElems = m_tp*nx ;
-   ---   // initialize nodal coordinates
-   --x   Index_t nidx = 0 ;
-   --x   Real_t tz = Real_t(1.125)*Real_t(m_planeLoc*nx)/Real_t(meshEdgeElems) ;
-      meshEdgeElems : constant Length_Type := Length_Type(this.variables.tp*nx) ;
+      --x   Index_t meshEdgeElems = m_tp*nx ;
+      ---   // initialize nodal coordinates
+      --x   Index_t nidx = 0 ;
+      --x   Real_t tz = Real_t(1.125)*Real_t(m_planeLoc*nx)/Real_t(meshEdgeElems) ;
+      meshEdgeElems : constant Length_Type := Length_Type(this.variables.tp*side_length) ;
       node_index    : Node_Index_Type;
-      t             : Coordinate_Type;
+      t             : Coordinate_Vector;
       zidx          : Element_Index_Type;
       function Calc_T_Initial
-        (loc_value : in Index_Type)
+        (loc_value : in Element_Index_Type)
          return Length_Type is
-        (1.125*Length_Type(loc_value*nx)/meshEdgeElems)
+        (1.125*Length_Type(loc_value*side_length)/meshEdgeElems)
           with Inline;
       function Calc_T_Increment
-        (loc_value : in Index_Type;
+        (loc_value : in Element_Index_Type;
          crp       : in Node_Index_Type)
          return Length_Type is
-        (1.125*Length_Type((loc_value*nx)+Index_Type(crp)+1)/meshEdgeElems)
-          with Inline;
+        (1.125*Length_Type((loc_value*side_length)+Index_Type(crp)+1)/meshEdgeElems)
+        with Inline;
    begin
       --x   for (Index_t plane=0; plane<edgeNodes; ++plane) {
       --x     Real_t ty = Real_t(1.125)*Real_t(m_rowLoc*nx)/Real_t(meshEdgeElems) ;
@@ -457,7 +504,7 @@ package body LULESH.Init is
                t(X) := Calc_T_Increment(this.variables.colLoc, col);
             end loop;
             --// ty += ds ;  // may accumulate roundoff, so:
-            t(X) := Calc_T_Increment(this.variables.rowLoc, row);
+            t(Y) := Calc_T_Increment(this.variables.rowLoc, row);
          end loop;
          --// tz += ds ;  // may accumulate roundoff, so:
          t(Z) := Calc_T_Increment(this.variables.planeLoc, plane);
@@ -647,167 +694,325 @@ package body LULESH.Init is
    -- void
    -- Domain::CreateRegionIndexSets(Int_t nr, Int_t balance)
    -- {
-   -- #if USE_MPI
-   --    Index_t myRank;
-   --    MPI_Comm_rank(MPI_COMM_WORLD, &myRank) ;
-   --    srand(myRank);
-   -- #else
-   --    srand(0);
-   --    Index_t myRank = 0;
-   -- #endif
-   --    this->numReg() = nr;
-   --    m_regElemSize = new Index_t[numReg()];
-   --    m_regElemlist = new Index_t*[numReg()];
-   --    Index_t nextIndex = 0;
-   --    //if we only have one region just fill it
-   --    // Fill out the regNumList with material numbers, which are always
-   --    // the region index plus one
-   --    if(numReg() == 1) {
-   --       while (nextIndex < numElem()) {
-   -- 	 this->regNumList(nextIndex) = 1;
-   --          nextIndex++;
-   --       }
-   --       regElemSize(0) = 0;
-   --    }
-   --    //If we have more than one region distribute the elements.
-   --    else {
-   --       Int_t regionNum;
-   --       Int_t regionVar;
-   --       Int_t lastReg = -1;
-   --       Int_t binSize;
-   --       Index_t elements;
-   --       Index_t runto = 0;
-   --       Int_t costDenominator = 0;
-   --       Int_t* regBinEnd = new Int_t[numReg()];
-   --       //Determine the relative weights of all the regions.  This is based off the -b flag.  Balance is the value passed into b.
-   --       for (Index_t i=0 ; i<numReg() ; ++i) {
-   --          regElemSize(i) = 0;
-   -- 	 costDenominator += pow((i+1), balance);  //Total sum of all regions weights
-   -- 	 regBinEnd[i] = costDenominator;  //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
-   --       }
-   --       //Until all elements are assigned
-   --       while (nextIndex < numElem()) {
-   -- 	 //pick the region
-   -- 	 regionVar = rand() % costDenominator;
-   -- 	 Index_t i = 0;
-   --          while(regionVar >= regBinEnd[i])
-   -- 	    i++;
-   --          //rotate the regions based on MPI rank.  Rotation is Rank % NumRegions this makes each domain have a different region with
-   --          //the highest representation
-   -- 	 regionNum = ((i + myRank) % numReg()) + 1;
-   -- 	 // make sure we don't pick the same region twice in a row
-   --          while(regionNum == lastReg) {
-   -- 	    regionVar = rand() % costDenominator;
-   -- 	    i = 0;
-   --             while(regionVar >= regBinEnd[i])
-   -- 	       i++;
-   -- 	    regionNum = ((i + myRank) % numReg()) + 1;
-   --          }
-   -- 	 //Pick the bin size of the region and determine the number of elements.
-   --          binSize = rand() % 1000;
-   -- 	 if(binSize < 773) {
-   -- 	   elements = rand() % 15 + 1;
-   -- 	 }
-   -- 	 else if(binSize < 937) {
-   -- 	   elements = rand() % 16 + 16;
-   -- 	 }
-   -- 	 else if(binSize < 970) {
-   -- 	   elements = rand() % 32 + 32;
-   -- 	 }
-   -- 	 else if(binSize < 974) {
-   -- 	   elements = rand() % 64 + 64;
-   -- 	 }
-   -- 	 else if(binSize < 978) {
-   -- 	   elements = rand() % 128 + 128;
-   -- 	 }
-   -- 	 else if(binSize < 981) {
-   -- 	   elements = rand() % 256 + 256;
-   -- 	 }
-   -- 	 else
-   -- 	    elements = rand() % 1537 + 512;
-   -- 	 runto = elements + nextIndex;
-   -- 	 //Store the elements.  If we hit the end before we run out of elements then just stop.
-   --          while (nextIndex < runto && nextIndex < numElem()) {
-   -- 	    this->regNumList(nextIndex) = regionNum;
-   -- 	    nextIndex++;
-   -- 	 }
-   -- 	 lastReg = regionNum;
-   --       }
-   --    }
-   --    // Convert regNumList to region index sets
-   --    // First, count size of each region
-   --    for (Index_t i=0 ; i<numElem() ; ++i) {
-   --       int r = this->regNumList(i)-1; // region index == regnum-1
-   --       regElemSize(r)++;
-   --    }
-   --    // Second, allocate each region index set
-   --    for (Index_t i=0 ; i<numReg() ; ++i) {
-   --       m_regElemlist[i] = new Index_t[regElemSize(i)];
-   --       regElemSize(i) = 0;
-   --    }
-   --    // Third, fill index sets
-   --    for (Index_t i=0 ; i<numElem() ; ++i) {
-   --       Index_t r = regNumList(i)-1;       // region index == regnum-1
-   --       Index_t regndx = regElemSize(r)++; // Note increment
-   --       regElemlist(r,regndx) = i;
-   --    }
-   --
-   -- }
+   procedure CreateRegionIndexSets
+     (this    : in out Domain_Record;
+      nreg    : in Region_Index_Type;
+      balance : in Balance_Type)
+   is
+      -- #if USE_MPI
+      --    Index_t myRank;
+      --    MPI_Comm_rank(MPI_COMM_WORLD, &myRank) ;
+      --    srand(myRank);
+      -- #else
+      --    srand(0);
+      --x    Index_t myRank = 0;
+      -- #endif
+      myRank   : Index_Type := 0;
+      nextIndex : Element_Index_Type := 0;
+   begin
+      --x    this->numReg() = nr;
+      this.numReg := nreg;
+      --x    m_regElemSize = new Index_t[numReg()];
+      --x    m_regElemlist = new Index_t*[numReg()];
+      this.regions := new Region_Array (0..this.numReg-1);
+      --x    Index_t nextIndex = 0;
+      ---    //if we only have one region just fill it
+      ---    // Fill out the regNumList with material numbers, which are always
+      ---    // the region index plus one
+      --x    if(numReg() == 1) {
+      --x       while (nextIndex < numElem()) {
+      --x 	 this->regNumList(nextIndex) = 1;
+      --x          nextIndex++;
+      --x       }
+      --       regElemSize(0) = 0;
+      --x    }
+      if this.numReg = 1 then
+         while (nextIndex < this.numElem) loop
+            this.elements (nextIndex).region_number := 1;
+            nextIndex := nextIndex + 1;
+         end loop;
+         this.regions(0).size :=0;
+         ---    //If we have more than one region distribute the elements.
+         --x    else {
+      else
+         declare
+            --x       Int_t regionNum;
+            --x       Int_t regionVar;
+            --x       Int_t lastReg = -1;
+            --x       Int_t binSize;
+            --x       Index_t elements;
+            --x       Index_t runto = 0;
+            --x       Int_t costDenominator = 0;
+            --x       Int_t* regBinEnd = new Int_t[numReg()];
+            regionNum       : Region_Index_Type;
+            regionVar       : Cost_Type;
+            lastReg         : Region_Index_Type := Region_Index_Type'Last;
+            binSize         : Int_t;
+            elements        : Element_Index_Type;
+            runto           : Element_Index_Type := 0;
+            costDenominator : Cost_Type := 0;
+            regBinEnd       : Region_Bin_End_Array_Access :=
+              new Region_Bin_End_Array(0..this.numReg-1);
+         begin
+            ---       //Determine the relative weights of all the regions.  This is based off the -b flag.  Balance is the value passed into b.
+            --x       for (Index_t i=0 ; i<numReg() ; ++i) {
+            --x          regElemSize(i) = 0;
+            --x 	 costDenominator += pow((i+1), balance);  //Total sum of all regions weights
+            --x 	 regBinEnd[i] = costDenominator;  //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
+            --x       }
+            for region_index in this.regions'Range loop
+               this.regions(region_index).size := 0;
+               costDenominator := costDenominator + Cost_Type((region_index+1)**Natural(balance));  -- //Total sum of all regions weights
+               regBinEnd (region_index) := costDenominator;  -- //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
+            end loop;
 
-   -- /////////////////////////////////////////////////////////////
-   -- void
-   -- Domain::SetupSymmetryPlanes(Int_t edgeNodes)
-   -- {
-   --   Index_t nidx = 0 ;
-   --   for (Index_t i=0; i<edgeNodes; ++i) {
-   --     Index_t planeInc = i*edgeNodes*edgeNodes ;
-   --     Index_t rowInc   = i*edgeNodes ;
-   --     for (Index_t j=0; j<edgeNodes; ++j) {
-   --       if (m_planeLoc == 0) {
-   -- 	m_symmZ[nidx] = rowInc   + j ;
-   --       }
-   --       if (m_rowLoc == 0) {
-   -- 	m_symmY[nidx] = planeInc + j ;
-   --       }
-   --       if (m_colLoc == 0) {
-   -- 	m_symmX[nidx] = planeInc + j*edgeNodes ;
-   --       }
-   --       ++nidx ;
-   --     }
-   --   }
-   -- }
+            ---       //Until all elements are assigned
+            --x       while (nextIndex < numElem()) {
+            while nextIndex < this.numElem loop
+               --- 	 //pick the region
+               --- 	 regionVar = rand() % costDenominator;
+               regionVar := Choose_Rem(costDenominator);
+               declare
+                  --x 	 Index_t i = 0;
+                  i : Region_Index_Type := 0;
+               begin
+                  --x          while(regionVar >= regBinEnd[i])
+                  --x 	    i++;
+                  while regionVar >= regBinEnd(i) loop
+                     i := i+1;
+                  end loop;
+                  ---          //rotate the regions based on MPI rank.
+                  --- Rotation is Rank % NumRegions this makes each domain
+                  --- have a different region with
+                  ---          //the highest representation
+                  --x 	 regionNum = ((i + myRank) % numReg()) + 1;
+                  --- 	 // make sure we don't pick the same region twice in a row
+                  --x          while(regionNum == lastReg) {
+                  --x 	    regionVar = rand() % costDenominator;
+                  --x 	    i = 0;
+                  --x             while(regionVar >= regBinEnd[i])
+                  --x 	       i++;
+                  --x 	    regionNum = ((i + myRank) % numReg()) + 1;
+                  --x          }
+                  regionNum := ((i + Region_Index_Type(myRank)) rem this.numReg) + 1;
+                  while regionNum = lastReg loop
+                     regionVar := Choose_Rem(costDenominator);
+                     i := 0;
+                     while regionVar >= regBinEnd(i) loop
+                        i := i+1;
+                     end loop;
+                     regionNum := ((i + Region_Index_Type(myRank)) rem this.numReg) + 1;
+                  end loop;
+               end;
+               --- 	 //Pick the bin size of the region and determine the number of elements.
+               --x          binSize = rand() % 1000;
+               --x 	 if(binSize < 773) {
+               --x 	   elements = rand() % 15 + 1;
+               --x 	 }
+               --x 	 else if(binSize < 937) {
+               --x 	   elements = rand() % 16 + 16;
+               --x 	 }
+               --x 	 else if(binSize < 970) {
+               --x 	   elements = rand() % 32 + 32;
+               --x 	 }
+               --x 	 else if(binSize < 974) {
+               --x 	   elements = rand() % 64 + 64;
+               --x 	 }
+               --x 	 else if(binSize < 978) {
+               --x 	   elements = rand() % 128 + 128;
+               --x 	 }
+               --x 	 else if(binSize < 981) {
+               --x 	   elements = rand() % 256 + 256;
+               --x 	 }
+               --x 	 else
+               --x 	    elements = rand() % 1537 + 512;
+               binSize := Choose_Rem(1000);
+               if binSize < 773 then
+                  elements := Choose_Rem(15 + 1);
+               elsif(binSize < 937) then
+                  elements := Choose_Rem(16 + 16);
+               elsif(binSize < 970) then
+                  elements := Choose_Rem(32 + 32);
+               elsif(binSize < 974) then
+                  elements := Choose_Rem(64 + 64);
+               elsif(binSize < 978) then
+                  elements := Choose_Rem(128 + 128);
+               elsif(binSize < 981) then
+                  elements := Choose_Rem(256 + 256);
+               else
+                  elements := Choose_Rem(1537 + 512);
+               end if;
+               --x 	 runto = elements + nextIndex;
+               --x 	 //Store the elements.  If we hit the end before we run out of elements then just stop.
+               --x          while (nextIndex < runto && nextIndex < numElem()) {
+               --x 	    this->regNumList(nextIndex) = regionNum;
+               --x 	    nextIndex++;
+               --x 	 }
+               runto := elements + nextIndex;
+               while nextIndex < runto and nextIndex < this.numElem loop
+                  this.elements(nextIndex).region_number := regionNum;
+                  nextIndex := nextIndex + 1;
+               end loop;
+               -- 	 lastReg = regionNum;
+               lastReg := regionNum;
+               --x       }
+            end loop;
+            --x    }
+         end;
+      end if;
+      ---    // Convert regNumList to region index sets
+      ---    // First, count size of each region
+      --x    for (Index_t i=0 ; i<numElem() ; ++i) {
+      --x       int r = this->regNumList(i)-1; // region index == regnum-1
+      --x       regElemSize(r)++;
+      --x    }
+      for element_index in this.Elements'Range loop
+         declare
+            --// region index == regnum-1
+            region_index : constant Region_Index_Type :=
+              this.elements(element_index).region_number-1;
+            size : Element_Index_Type renames
+              this.regions(region_index).size;
+         begin
+            size := size + 1;
+         end;
+      end loop;
+      ---    // Second, allocate each region index set
+      --x    for (Index_t i=0 ; i<numReg() ; ++i) {
+      --x       m_regElemlist[i] = new Index_t[regElemSize(i)];
+      --x       regElemSize(i) = 0;
+      --x    }
+      for region_index in this.Regions'Range loop
+         this.regions(region_index).elements := new
+           Element_Index_Array (0..this.regions(region_index).size-1);
+         this.regions(region_index).size := 0;
+      end loop;
+      ---    // Third, fill index sets
+      --x    for (Index_t i=0 ; i<numElem() ; ++i) {
+      --x       Index_t r = regNumList(i)-1;       // region index == regnum-1
+      --x       Index_t regndx = regElemSize(r)++; // Note increment
+      --x       regElemlist(r,regndx) = i;
+      --x    }
+      for element_index in this.Elements'Range loop
+         declare
+            --       // region index == regnum-1
+            region_index : constant Region_Index_Type :=
+              this.elements(element_index).region_number-1;
+            region_element_index : Element_Index_Type renames
+              this.regions(region_index).size;
+         begin
+            region_element_index := region_element_index + 1;
+            this.regions(region_index).elements(region_element_index) :=
+              element_index;
+         end;
+      end loop;
+      --x }
+   end CreateRegionIndexSets;
 
+   --- /////////////////////////////////////////////////////////////
+   --x void
+   --x Domain::SetupSymmetryPlanes(Int_t edgeNodes)
+   --x {
+   procedure SetupSymmetryPlanes
+     (this      : in out Domain_Record;
+      edgeNodes : in Node_Index_Type)
+   is
+      --x   Index_t nidx = 0 ;
+      nidx : Node_Index_Type := 0;
+   begin
+      --x   for (Index_t i=0; i<edgeNodes; ++i) {
+      --x     Index_t planeInc = i*edgeNodes*edgeNodes ;
+      --x     Index_t rowInc   = i*edgeNodes ;
+      --x     for (Index_t j=0; j<edgeNodes; ++j) {
+      --x       if (m_planeLoc == 0) {
+      --x 	m_symmZ[nidx] = rowInc   + j ;
+      --x       }
+      --x       if (m_rowLoc == 0) {
+      --x 	m_symmY[nidx] = planeInc + j ;
+      --x       }
+      --x       if (m_colLoc == 0) {
+      --x 	m_symmX[nidx] = planeInc + j*edgeNodes ;
+      --x       }
+      --x       ++nidx ;
+      --x     }
+      --x   }
+      for i in 0..edgeNodes-1 loop
+         declare
+            planeInc : constant Node_Index_Type := i*edgeNodes*edgeNodes;
+            rowInc   : constant Node_Index_Type := i*edgeNodes;
+         begin
+            for j in 0..edgeNodes-1 loop
+               if this.variables.planeLoc = 0 then
+                  this.nodes(nidx).symmetry_plane_nodes(Z) := rowInc + j;
+               end if;
+               if this.variables.rowLoc = 0 then
+                  this.nodes(nidx).symmetry_plane_nodes(Y) := planeInc + j;
+               end if;
+               if this.variables.colLoc = 0 then
+                  this.nodes(nidx).symmetry_plane_nodes(X) := planeInc + j*edgeNodes;
+               end if;
+            end loop;
+         end;
+      end loop;
+      --x }
+   end SetupSymmetryPlanes;
 
-
-   -- /////////////////////////////////////////////////////////////
-   -- void
-   -- Domain::SetupElementConnectivities(Int_t edgeElems)
-   -- {
-   --    lxim(0) = 0 ;
-   --    for (Index_t i=1; i<numElem(); ++i) {
-   --       lxim(i)   = i-1 ;
-   --       lxip(i-1) = i ;
-   --    }
-   --    lxip(numElem()-1) = numElem()-1 ;
-
-   --    for (Index_t i=0; i<edgeElems; ++i) {
-   --       letam(i) = i ;
-   --       letap(numElem()-edgeElems+i) = numElem()-edgeElems+i ;
-   --    }
-   --    for (Index_t i=edgeElems; i<numElem(); ++i) {
-   --       letam(i) = i-edgeElems ;
-   --       letap(i-edgeElems) = i ;
-   --    }
-
-   --    for (Index_t i=0; i<edgeElems*edgeElems; ++i) {
-   --       lzetam(i) = i ;
-   --       lzetap(numElem()-edgeElems*edgeElems+i) = numElem()-edgeElems*edgeElems+i ;
-   --    }
-   --    for (Index_t i=edgeElems*edgeElems; i<numElem(); ++i) {
-   --       lzetam(i) = i - edgeElems*edgeElems ;
-   --       lzetap(i-edgeElems*edgeElems) = i ;
-   --    }
-   -- }
+   --- /////////////////////////////////////////////////////////////
+   --x void
+   --x Domain::SetupElementConnectivities(Int_t edgeElems)
+   --x {
+   procedure SetupElementConnectivities
+     (this      : in out Domain_Record;
+      edgeElems : in Element_Index_Type) is
+   begin
+      --x    lxim(0) = 0 ;
+      --x    for (Index_t i=1; i<numElem(); ++i) {
+      --x       lxim(i)   = i-1 ;
+      --x       lxip(i-1) = i ;
+      --x    }
+      --x    lxip(numElem()-1) = numElem()-1 ;
+      this.elements(0).connections(Xi, M) := 0;
+      for i in 0..this.numElem-1 loop
+         this.elements(i).connections(Xi, M) := i-1;
+         this.elements(i-1).connections(Xi, P) := i;
+      end loop;
+      this.elements(this.numElem-1).connections(Xi, P) := this.numElem-1;
+      --x    for (Index_t i=0; i<edgeElems; ++i) {
+      --x       letam(i) = i ;
+      --x       letap(numElem()-edgeElems+i) = numElem()-edgeElems+i ;
+      --x    }
+      for i in 0..edgeElems-1 loop
+         this.elements(i).connections(Eta, M) := i;
+         this.elements(this.numElem-edgeElems+i).connections(Eta, P) :=
+           this.numElem-edgeElems+i;
+      end loop;
+      --x    for (Index_t i=edgeElems; i<numElem(); ++i) {
+      --x       letam(i) = i-edgeElems ;
+      --x       letap(i-edgeElems) = i ;
+      --x    }
+      for i in edgeElems..this.numElem-1 loop
+         this.elements(i).connections(Eta, M) := i-edgeElems;
+         this.elements(i-edgeElems).connections(Eta, P) := i;
+      end loop;
+      --x    for (Index_t i=0; i<edgeElems*edgeElems; ++i) {
+      --x       lzetam(i) = i ;
+      --x       lzetap(numElem()-edgeElems*edgeElems+i) = numElem()-edgeElems*edgeElems+i ;
+      --x    }
+      for i in 0..edgeElems*edgeElems-1 loop
+         this.elements(i).connections(Zeta, M) := i;
+         this.elements(this.numElem-edgeElems*edgeElems+i).connections(Zeta, P) :=
+           this.numElem-edgeElems*edgeElems+i;
+      end loop;
+      --x    for (Index_t i=edgeElems*edgeElems; i<numElem(); ++i) {
+      --x       lzetam(i) = i - edgeElems*edgeElems ;
+      --x       lzetap(i-edgeElems*edgeElems) = i ;
+      --x    }
+      for i in edgeElems*edgeElems..this.numElem-1 loop
+         this.elements(i).connections(Zeta, M) := i - edgeElems*edgeElems;
+         this.elements(i-edgeElems*edgeElems).connections(Zeta, P) := i;
+      end loop;
+      --x }
+   end SetupElementConnectivities;
 
    --- /////////////////////////////////////////////////////////////
    --x void
@@ -887,19 +1092,19 @@ package body LULESH.Init is
       --x     Index_t planeInc = i*edgeElems*edgeElems ;
       --x     Index_t rowInc   = i*edgeElems ;
       --x     for (Index_t j=0; j<edgeElems; ++j) {
-      --x       if (m_planeLoc == 0) {
-      --x 	elemBC(rowInc+j) |= ZETA_M_SYMM ;
-      --x       }
-      --x       else {
-      --x 	elemBC(rowInc+j) |= ZETA_M_COMM ;
-      --x 	lzetam(rowInc+j) = ghostIdx[0] + rowInc + j ;
-      --x       }
       for i in 0..edgeElems-1 loop
          declare
             planeInc : constant Element_Index_Type := i*edgeElems*edgeElems ;
             rowInc   : constant Element_Index_Type := i*edgeElems ;
          begin
             for j in 0..edgeElems-1 loop
+               --x       if (m_planeLoc == 0) {
+               --x 	elemBC(rowInc+j) |= ZETA_M_SYMM ;
+               --x       }
+               --x       else {
+               --x 	elemBC(rowInc+j) |= ZETA_M_COMM ;
+               --x 	lzetam(rowInc+j) = ghostIdx[0] + rowInc + j ;
+               --x       }
                declare
                   element : Element_Record renames
                     this.elements(rowInc+j);
@@ -926,54 +1131,94 @@ package body LULESH.Init is
                     this.elements(rowInc+j+this.numElem-edgeElems*edgeElems);
                begin
                   if this.variables.planeLoc = this.variables.tp-1 then
-                     element.elemBC (Zeta, P, Symm) := True;
+                     element.elemBC (Zeta, P, Free) := True;
                   else
                      element.elemBC (Zeta, P, Comm) := True;
                      element.connections(Zeta, P) := ghostIdx(1) + rowInc + j ;
                   end if;
                end;
-
-   --       if (m_rowLoc == 0) {
-   -- 	elemBC(planeInc+j) |= ETA_M_SYMM ;
-   --       }
-   --       else {
-   -- 	elemBC(planeInc+j) |= ETA_M_COMM ;
-   -- 	letam(planeInc+j) = ghostIdx[2] + rowInc + j ;
-   --       }
-
-   --       if (m_rowLoc == m_tp-1) {
-   -- 	elemBC(planeInc+j+edgeElems*edgeElems-edgeElems) |=
-   -- 	  ETA_P_FREE ;
-   --       }
-   --       else {
-   -- 	elemBC(planeInc+j+edgeElems*edgeElems-edgeElems) |=
-   -- 	  ETA_P_COMM ;
-   -- 	letap(planeInc+j+edgeElems*edgeElems-edgeElems) =
-   -- 	  ghostIdx[3] +  rowInc + j ;
-   --       }
-
-   --       if (m_colLoc == 0) {
-   -- 	elemBC(planeInc+j*edgeElems) |= XI_M_SYMM ;
-   --       }
-   --       else {
-   -- 	elemBC(planeInc+j*edgeElems) |= XI_M_COMM ;
-   -- 	lxim(planeInc+j*edgeElems) = ghostIdx[4] + rowInc + j ;
-   --       }
-
-   --       if (m_colLoc == m_tp-1) {
-   -- 	elemBC(planeInc+j*edgeElems+edgeElems-1) |= XI_P_FREE ;
-   --       }
-   --       else {
-   -- 	elemBC(planeInc+j*edgeElems+edgeElems-1) |= XI_P_COMM ;
-   -- 	lxip(planeInc+j*edgeElems+edgeElems-1) =
-   -- 	  ghostIdx[5] + rowInc + j ;
-   --       }
-   --x     }
+               --x       if (m_rowLoc == 0) {
+               --x 	elemBC(planeInc+j) |= ETA_M_SYMM ;
+               --x       }
+               --x       else {
+               --x 	elemBC(planeInc+j) |= ETA_M_COMM ;
+               --x 	letam(planeInc+j) = ghostIdx[2] + rowInc + j ;
+               --x       }
+               declare
+                  element : Element_Record renames
+                    this.elements(planeInc+j);
+               begin
+                  if this.variables.rowLoc = 0 then
+                     element.elemBC (Eta, M, Symm) := True;
+                  else
+                     element.elemBC (Eta, M, Comm) := True;
+                     element.connections(Eta, M) := ghostIdx(2) + rowInc + j ;
+                  end if;
+               end;
+               --x       if (m_rowLoc == m_tp-1) {
+               --x 	elemBC(planeInc+j+edgeElems*edgeElems-edgeElems) |=
+               --x 	  ETA_P_FREE ;
+               --x       }
+               --x       else {
+               --x 	elemBC(planeInc+j+edgeElems*edgeElems-edgeElems) |=
+               --x 	  ETA_P_COMM ;
+               --x 	letap(planeInc+j+edgeElems*edgeElems-edgeElems) =
+               --x 	  ghostIdx[3] +  rowInc + j ;
+               --x       }
+               declare
+                  element : Element_Record renames
+                    this.elements(planeInc+j+edgeElems*edgeElems-edgeElems);
+               begin
+                  if this.variables.rowLoc = this.variables.tp-1 then
+                     element.elemBC (Eta, P, Free) := True;
+                  else
+                     element.elemBC (Eta, P, Comm) := True;
+                     element.connections(Eta, P) := ghostIdx(3) + rowInc + j ;
+                  end if;
+               end;
+               --x       if (m_colLoc == 0) {
+               --x 	elemBC(planeInc+j*edgeElems) |= XI_M_SYMM ;
+               --x       }
+               --x       else {
+               --x 	elemBC(planeInc+j*edgeElems) |= XI_M_COMM ;
+               --x 	lxim(planeInc+j*edgeElems) = ghostIdx[4] + rowInc + j ;
+               --x       }
+               declare
+                  element : Element_Record renames
+                    this.elements(planeInc+j*edgeElems);
+               begin
+                  if this.variables.colLoc = 0 then
+                     element.elemBC (Xi, M, Symm) := True;
+                  else
+                     element.elemBC (Xi, M, Comm) := True;
+                     element.connections(Eta, M) := ghostIdx(4) + rowInc + j ;
+                  end if;
+               end;
+               --x       if (m_colLoc == m_tp-1) {
+               --x 	elemBC(planeInc+j*edgeElems+edgeElems-1) |= XI_P_FREE ;
+               --x       }
+               --x       else {
+               --x 	elemBC(planeInc+j*edgeElems+edgeElems-1) |= XI_P_COMM ;
+               --x 	lxip(planeInc+j*edgeElems+edgeElems-1) =
+               --x 	  ghostIdx[5] + rowInc + j ;
+               --x       }
+               declare
+                  element : Element_Record renames
+                    this.elements(planeInc+j*edgeElems+edgeElems-1);
+               begin
+                  if this.variables.colLoc = this.variables.tp-1 then
+                     element.elemBC (Xi, P, Free) := True;
+                  else
+                     element.elemBC (Xi, P, Comm) := True;
+                     element.connections(Xi, P) := ghostIdx(5) + rowInc + j ;
+                  end if;
+               end;
+               --x     }
             end loop;
             --x   }
          end;
       end loop;
-   --x }
+      --x }
    end SetupBoundaryConditions;
 
    --- ///////////////////////////////////////////////////////////////////////////
@@ -981,22 +1226,22 @@ package body LULESH.Init is
    --x                     Int_t *col, Int_t *row, Int_t *plane, Int_t *side)
    --x {
    procedure InitMeshDecomp
-     (numRanks : in Int_t;
-      myRank   : in Int_t;
-      col      : out Int_t;
-      row      : out Int_t;
-      plane    : out Int_t;
-      side     : out Int_t)
+     (numRanks : in Rank_Count_Range;
+      myRank   : in Rank_Type;
+      col      : out Element_Index_Type;
+      row      : out Element_Index_Type;
+      plane    : out Element_Index_Type;
+      side     : out Rank_Count_Range)
    is
       --x    Int_t testProcs;
       --x    Int_t dx, dy, dz;
       --x    Int_t myDom;
-      testProcs : Int_t;
-      dx        : Int_t;
-      dy        : Int_t;
-      dz        : Int_t;
-      dxyz      : Int_t;
-      myDom     : Int_t;
+      testProcs : Process_Count_Range;
+      dx        : Domain_Index_Type;
+      dy        : Domain_Index_Type;
+      dz        : Domain_Index_Type;
+      dxyz      : Domain_Index_Type;
+      myDom     : Domain_Index_Type;
    begin
       ---    // Assume cube processor layout for now
       --x    testProcs = Int_t(cbrt(Real_t(numRanks))+0.5) ;
@@ -1008,8 +1253,8 @@ package body LULESH.Init is
       --x       exit(-1);
       -- #endif
       --x    }
-      testProcs := Int_t(cbrt(real10(numRanks)));
-      if (testProcs*testProcs*testProcs /= numRanks) then
+      testProcs := Int_t'Truncation(cbrt(real10(numRanks)))
+      if testProcs**3 /= numRanks then
          raise Usage_Error
            with "Num processors (" & numRanks'Img &
            ") must be a cube of an integer (1, 8, 27, ...)";
@@ -1042,10 +1287,6 @@ package body LULESH.Init is
       --x    dx = testProcs ;
       --x    dy = testProcs ;
       --x    dz = testProcs ;
-      dx := testProcs;
-      dy := testProcs;
-      dz := testProcs;
-      dxyz := dx*dy*dz;
       ---    // temporary test
       --x    if (dx*dy*dz != numRanks) {
       --x       printf("error -- must have as many domains as procs\n") ;
@@ -1055,7 +1296,11 @@ package body LULESH.Init is
       --x       exit(-1);
       -- #endif
       --x    }
-      if dx*dy*dz /= numRanks then
+      dx := Domain_Index_Type(testProcs);
+      dy := Domain_Index_Type(testProcs);
+      dz := Domain_Index_Type(testProcs);
+      dxyz := dx*dy*dz;
+      if Process_Count_Range(dxyz) /= numRanks then
          raise Usage_Error with
            "Domain count:" & dxyz'Img &
            " does nor equal proc count:" & numRanks'Img;
@@ -1069,8 +1314,8 @@ package body LULESH.Init is
       --x          (myRank - remainder)*(dx*dy*dz/numRanks) ;
       --x    }
       declare
-         remainder : constant Int_t := dxyz rem numRanks;
-         quotient  : constant Int_t := dxyz / numRanks;
+         remainder : constant Rank_Count_Range := Rank_Count_Range(dxyz) rem numRanks;
+         quotient  : constant Rank_Count_Range := Rank_Count_Range(dxyz) / numRanks;
       begin
          if myRank < remainder then
             myDom := myRank * (1 + quotient) ;
@@ -1083,11 +1328,10 @@ package body LULESH.Init is
       --x    *row = (myDom / dx) % dy ;
       --x    *plane = myDom / (dx*dy) ;
       --x    *side = testProcs;
-      col   := myDom rem dx ;
-      row   := (myDom / dx) rem dy ;
-      plane := myDom / (dx * dy) ;
+      col   := Element_Index_Type (myDom rem dx);
+      row   := Element_Index_Type ((myDom / dx) rem dy);
+      plane := Element_Index_Type (myDom / (dx * dy));
       side  := testProcs;
-
       --x    return;
       --x }
    end InitMeshDecomp;

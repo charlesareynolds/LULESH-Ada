@@ -191,13 +191,13 @@ package body LULESH is
    --x       *ptr = NULL ;
    --x    }
    --x }
-   procedure Release is new Ada.Unchecked_Deallocation
-     (Object => Force_Vector_Array,
-      Name   => Force_Vector_Array_Access);
-
-   procedure Release is new Ada.Unchecked_Deallocation
-     (Object => Sig_Array,
-      Name   => Sig_Array_Access);
+--     procedure Release is new Ada.Unchecked_Deallocation
+--       (Object => Force_Vector_Array,
+--        Name   => Force_Vector_Array_Access);
+--
+--     procedure Release is new Ada.Unchecked_Deallocation
+--       (Object => Sig_Array,
+--        Name   => Sig_Array_Access);
 
    --- /******************************************/
 
@@ -210,7 +210,7 @@ package body LULESH is
    -- EXPORTED (private):
    ----------------------
    procedure TimeIncrement (domain : not null access Domain_Record) is
-      targetdt : Real_Type;
+      targetdt : Duration_Type;
    begin
       --x    Real_t targetdt = domain.stoptime() - domain.time() ;
       targetdt := domain.variables.stoptime - domain.variables.time;
@@ -225,9 +225,9 @@ package body LULESH is
          --x       Real_t newdt ;
          declare
             ratio  : Real_Type;
-            olddt  : Real_Type := domain.variables.deltatime;
-            gnewdt : Real_Type := 1.0e+20;
-            newdt  : Real_Type;
+            olddt  : Duration_Type := domain.variables.deltatime;
+            gnewdt : Duration_Type := 1.0e+20;
+            newdt  : Duration_Type;
          begin
             --x       if (domain.dtcourant() < gnewdt) {
             --x          gnewdt = domain.dtcourant() / Real_t(2.0) ;
@@ -323,7 +323,7 @@ package body LULESH is
    is
    begin
       for node_Index in elem'Range loop
-         elem (node_Index) := domain.nodes.coordinate (elemToNode (node_Index));
+         elem (node_Index) := domain.nodes (elemToNode (node_Index)).coordinate;
       end loop;
    end CollectDomainNodesToElemNodes;
 
@@ -584,10 +584,10 @@ package body LULESH is
    procedure SumElemFaceNormal
    -- Using four parms here instead of an array because this will be called with
    -- disjoint elements of an array, and an aggregate is not a variable:
-     (n0         : in out Coordinate_Type;
-      n1         : in out Coordinate_Type;
-      n2         : in out Coordinate_Type;
-      n3         : in out Coordinate_Type;
+     (n0         : in out Coordinate_Vector;
+      n1         : in out Coordinate_Vector;
+      n2         : in out Coordinate_Vector;
+      n3         : in out Coordinate_Vector;
       Face_Nodes : in NodesPerFace_Coordinate_Array)
      with Inline
    is
