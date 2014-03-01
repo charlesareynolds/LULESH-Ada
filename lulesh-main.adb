@@ -14,8 +14,8 @@ procedure Lulesh.main is
    --x    Int_t myRank ;
    --x    struct cmdLineOpts opts;
    locDom   : Domain_Access;
-   numRanks : Int_t;
-   myRank   : Int_t;
+   numRanks : Rank_Type;
+   myRank   : Rank_Type;
    opts     : LULESH.Util.cmdLineOpts;
 
    -- from declarations below:
@@ -52,7 +52,7 @@ begin
      (its      => 9999999,
       side_length       => 30,
       numReg   => 11,
-      numFiles => (numRanks+10)/9,
+      numFiles => (Int_t(numRanks)+10)/9,
       showProg => False,
       quiet    => False,
       viz      => False,
@@ -81,7 +81,7 @@ begin
       ATI.Put_Line ("Running problem size " & opts.side_length'Img & "^3 per domain until completion");
       ATI.Put_Line ("Num processors: " & numRanks'Img);
       ATI.Put_Line ("Total number of elements: " &
-                      Int_t'Image(numRanks*opts.side_length*opts.side_length*opts.side_length));
+                      Int_t'Image(Int_T(numRanks)*Int_t(opts.side_length)**3));
       ATI.Put_Line ("");
       ATI.Put_Line ("To run other sizes, use -s <integer>.");
       ATI.Put_Line ("To run a fixed number of iterations, use -i <integer>.");
@@ -96,32 +96,32 @@ begin
    ---    // Set up the mesh and decompose. Assumes regular cubes for now
    --x    Int_t col, row, plane, side;
    declare
-      col   : Int_t;
-      row   : Int_t;
-      plane : Int_t;
-      side  : Int_t;
+      domain_col       : Domain_Index_Type;
+      domain_row       : Domain_Index_Type;
+      domain_plane     : Domain_Index_Type;
+      domains_per_side : Domain_Index_Type;
    begin
-      --x    InitMeshDecomp(numRanks, myRank, &col, &row, &plane, &side);
+      --x    InitMeshDecomp(numRanks, myRank, &col, &row, &domain_, &side);
       LULESH.Init.InitMeshDecomp
         (numRanks,
          myRank,
-         col,
-         row,
-         plane,
-         side);
+         domain_col,
+         domain_row,
+         domain_plane,
+         domains_per_side);
       ---    // Build the main data structure and initialize it
       --x    locDom = new Domain(numRanks, col, row, plane, opts.nx,
       --x                        side, opts.numReg, opts.balance, opts.cost) ;
       locDom := LULESH.Init.Create
-        (numRanks => numRanks,
-         colLoc   => Index_Type (col),
-         rowLoc   => Index_Type (row),
-         planeLoc => Index_Type (plane),
-         side_length       => Index_Type (opts.side_length),
-         tp       => side,
-         nr       => opts.numReg,
-         balance  => opts.balance,
-         cost     => opts.cost);
+        (numRanks    => numRanks,
+         colLoc      => domain_col,
+         rowLoc      => domain_row,
+         planeLoc    => domain_plane,
+         side_length => opts.side_length,
+         tp          => domains_per_side,
+         nr          => opts.numReg,
+         balance     => opts.balance,
+         cost        => opts.cost);
    end;
 
 

@@ -171,12 +171,12 @@ package body LULESH.Init is
    -- EXPORTED:
    ------------
    function Create
-     (numRanks    : in Int_t;
-      colLoc      : in Element_Index_Type;
-      rowLoc      : in Element_Index_Type;
-      planeLoc    : in Element_Index_Type;
+     (numRanks    : in Rank_Count_Range;
+      colLoc      : in Domain_Index_Type;
+      rowLoc      : in Domain_Index_Type;
+      planeLoc    : in Domain_Index_Type;
       side_length : in Element_Index_Type;
-      tp          : in Index_Type;
+      tp          : in Domain_Index_Type;
       nr          : in Region_Index_Type;
       balance     : in Balance_Type;
       cost        : in Cost_Type)
@@ -424,7 +424,7 @@ package body LULESH.Init is
       --x    }
       declare
          ebase : constant Energy_Type := 3.948746e+7;
-         scale : constant Real_Type   := Real_Type(side_length*Index_Type(this.variables.tp))/45.0;
+         scale : constant Real_Type   := Real_Type(side_length)*Real_Type(this.variables.tp)/45.0;
          einit : constant Energy_Type := ebase*Energy_Type(scale**3);
       begin
          if (this.variables.rowLoc
@@ -453,26 +453,23 @@ package body LULESH.Init is
       edgeNodes   : in Node_Index_Type;
       edgeElems   : in Element_Index_Type)
    is
+      subtype Edge_Nodes_Range is Node_Index_Type range 0..edgeNodes-1;
       --x   Index_t meshEdgeElems = m_tp*nx ;
       ---   // initialize nodal coordinates
       --x   Index_t nidx = 0 ;
-      --x   Real_t tz = Real_t(1.125)*Real_t(m_planeLoc*nx)/Real_t(meshEdgeElems) ;
-      meshEdgeElems : constant Length_Type := Length_Type(this.variables.tp*side_length) ;
+      meshEdgeElems : constant Length_Type :=
+        Length_Type(this.variables.tp)*side_length ;
       node_index    : Node_Index_Type;
       t             : Coordinate_Vector;
       zidx          : Element_Index_Type;
-      function Calc_T_Initial
-        (loc_value : in Element_Index_Type)
+      function Calc_T_Part
+        (loc        : in Domain_Index_Type;
+         node_index : in Node_Index_Type)
          return Length_Type is
-        (1.125*Length_Type(loc_value*side_length)/meshEdgeElems)
-          with Inline;
-      function Calc_T_Increment
-        (loc_value : in Element_Index_Type;
-         crp       : in Node_Index_Type)
-         return Length_Type is
-        (1.125*Length_Type((loc_value*side_length)+Index_Type(crp)+1)/meshEdgeElems)
+        (1.125*Length_Type((loc*side_length)+Index_Type(node_index))/meshEdgeElems)
         with Inline;
    begin
+      --x   Real_t tz = Real_t(1.125)*Real_t(m_planeLoc*nx)/Real_t(meshEdgeElems) ;
       --x   for (Index_t plane=0; plane<edgeNodes; ++plane) {
       --x     Real_t ty = Real_t(1.125)*Real_t(m_rowLoc*nx)/Real_t(meshEdgeElems) ;
       --x     for (Index_t row=0; row<edgeNodes; ++row) {
@@ -492,22 +489,16 @@ package body LULESH.Init is
       --x     tz = Real_t(1.125)*Real_t(m_planeLoc*nx+plane+1)/Real_t(meshEdgeElems) ;
       --x   }
       node_index := 0;
-      t(Z) := Calc_T_Initial(this.variables.planeLoc);
-      for plane in 0..edgeNodes-1 loop
-         t(Y) := Calc_T_Initial(this.variables.rowLoc);
-         for row in 0..edgeNodes-1 loop
-            t(X) := Calc_T_Initial(this.variables.colLoc);
-            for col in 0..edgeNodes-1 loop
+      for plane in Edge_Nodes_Range loop
+         t(Z) := Calc_T_Part(this.variables.planeLoc, plane);
+         for row in Edge_Nodes_Range loop
+            t(Y) := Calc_T_Part(this.variables.rowLoc, row);
+            for col in Edge_Nodes_Range loop
+               t(X) := Calc_T_Part(this.variables.colLoc, col);
                this.nodes(node_index).coordinate := T;
                node_index := node_index + 1;
-               --// tx += ds ; // may accumulate roundoff, so:
-               t(X) := Calc_T_Increment(this.variables.colLoc, col);
             end loop;
-            --// ty += ds ;  // may accumulate roundoff, so:
-            t(Y) := Calc_T_Increment(this.variables.rowLoc, row);
          end loop;
-         --// tz += ds ;  // may accumulate roundoff, so:
-         t(Z) := Calc_T_Increment(this.variables.planeLoc, plane);
       end loop;
 
       ---   // embed hexehedral elements in nodal point lattice
@@ -534,9 +525,9 @@ package body LULESH.Init is
       --x   }
       zidx := 0 ;
       node_index := 0;
-      for plane in 0..edgeElems-1 loop
-         for row in 0..edgeElems-1 loop
-            for col in 0..edgeElems-1 loop
+      for plane in Edge_Nodes_Range loop
+         for row in Edge_Nodes_Range loop
+            for col in Edge_Nodes_Range loop
                this.elements(zidx).node_indexes :=
                  (0 => node_index                                       ,
                   1 => node_index                                   + 1 ,
@@ -1096,6 +1087,10 @@ package body LULESH.Init is
          declare
             planeInc : constant Element_Index_Type := i*edgeElems*edgeElems ;
             rowInc   : constant Element_Index_Type := i*edgeElems ;
+            function At_Beginning (this : in Domain_Index_Type) return Boolean is
+               (this = 0);
+            function At_End (domain : in Domain_Index_Type) return Boolean is
+               (domain = this.variables.tp-1);
          begin
             for j in 0..edgeElems-1 loop
                --x       if (m_planeLoc == 0) {
@@ -1109,10 +1104,10 @@ package body LULESH.Init is
                   element : Element_Record renames
                     this.elements(rowInc+j);
                begin
-                  if this.variables.planeLoc = 0 then
-                     element.elemBC (Zeta, M, Symm) := True;
+                  if At_Beginning(this.variables.planeLoc) then
+                     element.elemBC(Zeta, M, Symm) := True;
                   else
-                     element.elemBC (Zeta, M, Comm) := True;
+                     element.elemBC(Zeta, M, Comm) := True;
                      element.connections(Zeta, M) := ghostIdx(0) + rowInc + j ;
                   end if;
                end;
@@ -1130,10 +1125,10 @@ package body LULESH.Init is
                   element : Element_Record renames
                     this.elements(rowInc+j+this.numElem-edgeElems*edgeElems);
                begin
-                  if this.variables.planeLoc = this.variables.tp-1 then
-                     element.elemBC (Zeta, P, Free) := True;
+                  if At_End(this.variables.planeLoc) then
+                     element.elemBC(Zeta, P, Free) := True;
                   else
-                     element.elemBC (Zeta, P, Comm) := True;
+                     element.elemBC(Zeta, P, Comm) := True;
                      element.connections(Zeta, P) := ghostIdx(1) + rowInc + j ;
                   end if;
                end;
@@ -1148,10 +1143,10 @@ package body LULESH.Init is
                   element : Element_Record renames
                     this.elements(planeInc+j);
                begin
-                  if this.variables.rowLoc = 0 then
-                     element.elemBC (Eta, M, Symm) := True;
+                  if At_Beginning(this.variables.rowLoc) then
+                     element.elemBC(Eta, M, Symm) := True;
                   else
-                     element.elemBC (Eta, M, Comm) := True;
+                     element.elemBC(Eta, M, Comm) := True;
                      element.connections(Eta, M) := ghostIdx(2) + rowInc + j ;
                   end if;
                end;
@@ -1169,10 +1164,10 @@ package body LULESH.Init is
                   element : Element_Record renames
                     this.elements(planeInc+j+edgeElems*edgeElems-edgeElems);
                begin
-                  if this.variables.rowLoc = this.variables.tp-1 then
-                     element.elemBC (Eta, P, Free) := True;
+                  if At_End(this.variables.rowLoc) then
+                     element.elemBC(Eta, P, Free) := True;
                   else
-                     element.elemBC (Eta, P, Comm) := True;
+                     element.elemBC(Eta, P, Comm) := True;
                      element.connections(Eta, P) := ghostIdx(3) + rowInc + j ;
                   end if;
                end;
@@ -1187,10 +1182,10 @@ package body LULESH.Init is
                   element : Element_Record renames
                     this.elements(planeInc+j*edgeElems);
                begin
-                  if this.variables.colLoc = 0 then
-                     element.elemBC (Xi, M, Symm) := True;
+                  if At_Beginning(this.variables.colLoc) then
+                     element.elemBC(Xi, M, Symm) := True;
                   else
-                     element.elemBC (Xi, M, Comm) := True;
+                     element.elemBC(Xi, M, Comm) := True;
                      element.connections(Eta, M) := ghostIdx(4) + rowInc + j ;
                   end if;
                end;
@@ -1206,10 +1201,10 @@ package body LULESH.Init is
                   element : Element_Record renames
                     this.elements(planeInc+j*edgeElems+edgeElems-1);
                begin
-                  if this.variables.colLoc = this.variables.tp-1 then
-                     element.elemBC (Xi, P, Free) := True;
+                  if At_End(this.variables.colLoc) then
+                     element.elemBC(Xi, P, Free) := True;
                   else
-                     element.elemBC (Xi, P, Comm) := True;
+                     element.elemBC(Xi, P, Comm) := True;
                      element.connections(Xi, P) := ghostIdx(5) + rowInc + j ;
                   end if;
                end;
@@ -1226,22 +1221,22 @@ package body LULESH.Init is
    --x                     Int_t *col, Int_t *row, Int_t *plane, Int_t *side)
    --x {
    procedure InitMeshDecomp
-     (numRanks : in Rank_Count_Range;
-      myRank   : in Rank_Type;
-      col      : out Element_Index_Type;
-      row      : out Element_Index_Type;
-      plane    : out Element_Index_Type;
-      side     : out Rank_Count_Range)
+     (numRanks         : in Rank_Count_Range;
+      myRank           : in Rank_Type;
+      domain_column    : out Domain_Index_Type;
+      domain_row       : out Domain_Index_Type;
+      domain_plane     : out Domain_Index_Type;
+      domains_per_side : out Domain_Index_Type)
    is
       --x    Int_t testProcs;
       --x    Int_t dx, dy, dz;
       --x    Int_t myDom;
-      testProcs : Process_Count_Range;
-      dx        : Domain_Index_Type;
-      dy        : Domain_Index_Type;
-      dz        : Domain_Index_Type;
-      dxyz      : Domain_Index_Type;
-      myDom     : Domain_Index_Type;
+      ranks_root : Rank_Count_Range;
+      dx         : Domain_Index_Type;
+      dy         : Domain_Index_Type;
+      dz         : Domain_Index_Type;
+      dxyz       : Domain_Index_Type;
+      my_domain  : Domain_Index_Type;
    begin
       ---    // Assume cube processor layout for now
       --x    testProcs = Int_t(cbrt(Real_t(numRanks))+0.5) ;
@@ -1253,8 +1248,9 @@ package body LULESH.Init is
       --x       exit(-1);
       -- #endif
       --x    }
-      testProcs := Int_t'Truncation(cbrt(real10(numRanks)))
-      if testProcs**3 /= numRanks then
+      --!! same as c++?:
+      ranks_root := Rank_Type(cbrt(real10(numRanks)));
+      if ranks_root**3 /= numRanks then
          raise Usage_Error
            with "Num processors (" & numRanks'Img &
            ") must be a cube of an integer (1, 8, 27, ...)";
@@ -1296,9 +1292,9 @@ package body LULESH.Init is
       --x       exit(-1);
       -- #endif
       --x    }
-      dx := Domain_Index_Type(testProcs);
-      dy := Domain_Index_Type(testProcs);
-      dz := Domain_Index_Type(testProcs);
+      dx := Domain_Index_Type(ranks_root);
+      dy := Domain_Index_Type(ranks_root);
+      dz := Domain_Index_Type(ranks_root);
       dxyz := dx*dy*dz;
       if Process_Count_Range(dxyz) /= numRanks then
          raise Usage_Error with
@@ -1314,13 +1310,18 @@ package body LULESH.Init is
       --x          (myRank - remainder)*(dx*dy*dz/numRanks) ;
       --x    }
       declare
+         -- Always 0, since dxyz = numRanks:
          remainder : constant Rank_Count_Range := Rank_Count_Range(dxyz) rem numRanks;
+         -- Always 1, since dxyz = numRanks:
          quotient  : constant Rank_Count_Range := Rank_Count_Range(dxyz) / numRanks;
       begin
+         -- Always false:
          if myRank < remainder then
-            myDom := myRank * (1 + quotient) ;
+            my_domain := myRank * (1 + quotient) ;
          else
-            myDom := remainder * (1 + quotient) +
+            -- my_domain := 0 * 2 + (myRank - 0) * 1:
+            -- my_domain := myRank:
+            my_domain := remainder * (1 + quotient) +
               (myRank - remainder) * quotient ;
          end if;
       end;
@@ -1328,10 +1329,10 @@ package body LULESH.Init is
       --x    *row = (myDom / dx) % dy ;
       --x    *plane = myDom / (dx*dy) ;
       --x    *side = testProcs;
-      col   := Element_Index_Type (myDom rem dx);
-      row   := Element_Index_Type ((myDom / dx) rem dy);
-      plane := Element_Index_Type (myDom / (dx * dy));
-      side  := testProcs;
+      domain_column    := my_domain rem dx;
+      domain_row       := (my_domain / dx) rem dy;
+      domain_plane     := my_domain / (dx * dy);
+      domains_per_side := Domain_Index_Type (ranks_root);
       --x    return;
       --x }
    end InitMeshDecomp;

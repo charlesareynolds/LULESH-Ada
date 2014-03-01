@@ -28,7 +28,7 @@ package LULESH.Util is
    --x void ParseCommandLineOptions(int argc, char *argv[],
    --x                              Int_t myRank, struct cmdLineOpts *opts);
    procedure ParseCommandLineOptions
-     (myRank : in Int_t;
+     (myRank : in Rank_Type;
       opts   : out cmdLineOpts);
 
    --x void VerifyAndWriteFinalOutput(Real_t elapsed_time,

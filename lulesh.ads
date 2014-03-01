@@ -69,7 +69,7 @@ package LULESH is
 
    type Rank_Type              is new Natural;
    subtype Process_ID_Type     is Rank_Type;
-   subtype Rank_Count_Range    is Rank_Type range 1..Rank_Type'Last
+   subtype Rank_Count_Range    is Rank_Type range 1..Rank_Type'Last;
    subtype Process_Count_Range is Rank_Count_Range;
 
    --- Looking down on element:
@@ -488,16 +488,16 @@ package LULESH is
       stoptime        : Time_Type;
 
       --x    Int_t   m_numRanks ;
-      numRanks : Int_t;
+      numRanks : Rank_Count_Range;
 
       --x    Index_t m_colLoc ;
       --x    Index_t m_rowLoc ;
       --x    Index_t m_planeLoc ;
       --x    Index_t m_tp ;
-      colLoc   : Element_Index_Type;
-      rowLoc   : Element_Index_Type;
-      planeLoc : Element_Index_Type;
-      tp       : Index_Type;
+      colLoc   : Domain_Index_Type;
+      rowLoc   : Domain_Index_Type;
+      planeLoc : Domain_Index_Type;
+      tp       : Domain_Index_Type;
    end record;
 
    type Parameters_Record is record
