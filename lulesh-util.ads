@@ -12,15 +12,15 @@ package LULESH.Util is
    --x    Int_t balance; // -b
    --x };
    type cmdLineOpts is record
-      its      : Int_t;
-      nx       : Int_t;
-      numReg   : Int_t;
-      numFiles : Int_t;
-      showProg : Boolean;
-      quiet    : Boolean;
-      viz      : Boolean;
-      cost     : Int_t;
-      balance  : Int_t;
+      its         : Int_t;
+      side_length : Element_Index_Type;
+      numReg      : Int_t;
+      numFiles    : Int_t;
+      showProg    : Boolean;
+      quiet       : Boolean;
+      viz         : Boolean;
+      cost        : Cost_Type;
+      balance     : Balance_Type;
    end record;
 
    --- // lulesh-util
@@ -37,8 +37,8 @@ package LULESH.Util is
    --x                                Int_t numRanks);
    procedure VerifyAndWriteFinalOutput
      (elapsed_time : in AC.Day_Duration;
-      locDom       : in Access_Domain;
-      nx           : in Int_t;
+      locDom       : in Domain_Access;
+      side_length  : in Element_Index_Type;
       numRanks     : Int_t);
 
 
