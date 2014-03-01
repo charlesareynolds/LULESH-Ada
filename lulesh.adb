@@ -192,8 +192,12 @@ package body LULESH is
    --x    }
    --x }
 --     procedure Release is new Ada.Unchecked_Deallocation
---       (Object => Real_Array,
---        Name   => Real_Array_Access);
+--       (Object => Force_Vector_Array,
+--        Name   => Force_Vector_Array_Access);
+--
+--     procedure Release is new Ada.Unchecked_Deallocation
+--       (Object => Sig_Array,
+--        Name   => Sig_Array_Access);
 
    --- /******************************************/
 
@@ -205,7 +209,7 @@ package body LULESH is
    ----------------------
    -- EXPORTED (private):
    ----------------------
-   procedure TimeIncrement (domain : access Domain_Record) is
+   procedure TimeIncrement (domain : not null access Domain_Record) is
       targetdt : Duration_Type;
    begin
       --x    Real_t targetdt = domain.stoptime() - domain.time() ;
@@ -256,12 +260,12 @@ package body LULESH is
             --x             newdt = olddt*domain.deltatimemultub() ;
             --x          }
             --x       }
-            ratio := Real_Type (newdt / olddt);
+            ratio := newdt / olddt;
             if ratio >= 1.0 then
                if ratio < domain.variables.deltatimemultlb then
                   newdt := olddt;
                elsif ratio > domain.variables.deltatimemultub then
-                  newdt := olddt * Duration_Type (domain.variables.deltatimemultub);
+                  newdt := olddt * domain.variables.deltatimemultub;
                end if;
 
                --x       if (newdt > domain.dtmax()) {
@@ -314,13 +318,12 @@ package body LULESH is
    procedure CollectDomainNodesToElemNodes
      (domain     : access Domain_Record;
       elemToNode : in     NodesPerElement_Index_Array;
-      elemNodes  : out    NodesPerElement_Location_Array)
+      elem       : out    NodesPerElement_Coordinate_Array)
      with Inline
    is
    begin
-      for node_Index in NodesPerElement_Index_Type loop
-         elemNodes (node_Index) :=
-           domain.nodes.location (elemToNode (node_Index));
+      for node_Index in elem'Range loop
+         elem (node_Index) := domain.nodes (elemToNode (node_Index)).coordinate;
       end loop;
    end CollectDomainNodesToElemNodes;
 
@@ -333,7 +336,7 @@ package body LULESH is
    --x {
    procedure InitStressTermsForElems
      (domain : access Domain_Record;
-      sig    : in out NodesPerElement_XYZ_Real_Array_Array)
+      sig    : out NodesPerElement_Force_Vector_Array)
      with Inline
    is
       ---    //
@@ -344,10 +347,10 @@ package body LULESH is
       --x    for (Index_t i = 0 ; i < numElem ; ++i){
       --x       sigxx[i] = sigyy[i] = sigzz[i] =  - domain.p(i) - domain.q(i) ;
       --x    }
-      for i in domain.elements.pressure'Range loop
-         sig (i) :=
-           (others =>
-              - domain.elements.pressure(i) - domain.elements.q(i));
+      for i in sig'Range loop
+         sig (i) := (others =>
+                     - domain.elements.static_pressure(i)
+                     - domain.elements.dynamic_pressure(i));
       end loop;
       --x }
    end InitStressTermsForElems;
@@ -361,7 +364,7 @@ package body LULESH is
    --                                        Real_t b[][8],
    --                                        Real_t* const volume )
    procedure CalcElemShapeFunctionDerivatives
-     (N      : in NodesPerElement_XYZ_Real_Array;
+     (N      : in NodesPerElement_Coordinate_Array;
       b      : out XYZ_NodesPerElement_Real_Array;
       volume : out Real_Type)
      with Inline
@@ -392,40 +395,40 @@ package body LULESH is
       cj : XYZ_XEZ_Real_Array;
 
       procedure Calculate_Xi
-        (coord : in Dimension_Type)
+        (coord : in Cartesian_Axes)
         with Inline is
       begin
          fj(coord ,Xi) := 0.125 *
-        (+ (N(6, coord) - N(0, coord))
-         + (N(5, coord) - N(3, coord))
-         - (N(7, coord) - N(1, coord))
-         - (N(4, coord) - N(2, coord)));
+        (+ (N(6)(coord) - N(0)(coord))
+         + (N(5)(coord) - N(3)(coord))
+         - (N(7)(coord) - N(1)(coord))
+         - (N(4)(coord) - N(2)(coord)));
       end Calculate_Xi;
 
       procedure Calculate_Eta
-        (coord : in Dimension_Type)
+        (coord : in Cartesian_Axes)
         with Inline is
       begin
          fj(coord ,Eta) := 0.125 *
-        (+ (N(6, coord) - N(0, coord))
-         - (N(5, coord) - N(3, coord))
-         + (N(7, coord) - N(1, coord))
-         - (N(4, coord) - N(2, coord)));
+        (+ (N(6)(coord) - N(0)(coord))
+         - (N(5)(coord) - N(3)(coord))
+         + (N(7)(coord) - N(1)(coord))
+         - (N(4)(coord) - N(2)(coord)));
       end Calculate_Eta;
 
       procedure Calculate_Zeta
-        (coord : in Dimension_Type)
+        (coord : in Cartesian_Axes)
         with Inline is
       begin
          fj(coord ,Zeta) := 0.125 *
-        (+ (N(6, coord) - N(0, coord))
-         + (N(5, coord) - N(3, coord))
-         + (N(7, coord) - N(1, coord))
-         + (N(4, coord) - N(2, coord)));
+        (+ (N(6)(coord) - N(0)(coord))
+         + (N(5)(coord) - N(3)(coord))
+         + (N(7)(coord) - N(1)(coord))
+         + (N(4)(coord) - N(2)(coord)));
       end Calculate_Zeta;
 
       procedure Calculate_Partial
-        (coord : in Dimension_Type)
+        (coord : in Cartesian_Axes)
         with Inline is
       begin
          b(coord, 0) :=
@@ -463,7 +466,7 @@ package body LULESH is
       --x   fjzet = Real_t(.125) * ( (z6-z0) - (z5-z3) + (z7-z1) - (z4-z2) );
       --x   fjzze = Real_t(.125) * ( (z6-z0) + (z5-z3) + (z7-z1) + (z4-z2) );
 
-      for Index in Dimension_Type loop
+      for Index in Cartesian_Axes loop
          Calculate_Xi (Index);
          Calculate_Eta (Index);
          Calculate_Zeta (Index);
@@ -539,7 +542,7 @@ package body LULESH is
       --x   b[2][5] = -b[2][3];
       --x   b[2][6] = -b[2][0];
       --x   b[2][7] = -b[2][1];
-      for Index in Dimension_Type loop
+      for Index in Cartesian_Axes loop
          Calculate_Partial (Index);
       end loop;
 
@@ -581,11 +584,11 @@ package body LULESH is
    procedure SumElemFaceNormal
    -- Using four parms here instead of an array because this will be called with
    -- disjoint elements of an array, and an aggregate is not a variable:
-     (n0         : in out XYZ_Real_Array;
-      n1         : in out XYZ_Real_Array;
-      n2         : in out XYZ_Real_Array;
-      n3         : in out XYZ_Real_Array;
-      Face_Nodes : in NodesPerFace_Location_Array)
+     (n0         : in out Coordinate_Vector;
+      n1         : in out Coordinate_Vector;
+      n2         : in out Coordinate_Vector;
+      n3         : in out Coordinate_Vector;
+      Face_Nodes : in NodesPerFace_Coordinate_Array)
      with Inline
    is
       --x    Real_t bisectX0 = Real_t(0.5) * (x3 + x2 - x1 - x0);
@@ -625,7 +628,7 @@ package body LULESH is
             Z => Calc_Bisect_1 (z_Coords)));
 
       function Calc_Area
-        (D1, D2 : in Dimension_Type) return Real_Type is
+        (D1, D2 : in Cartesian_Axes) return Real_Type is
         (0.25 * (bisect (0, D1) * bisect (1, D2) -
                  bisect (0, D2) * bisect (1, D1)))
         with Inline;
@@ -649,7 +652,7 @@ package body LULESH is
       --x    *normalZ1 += areaZ;
       --x    *normalZ2 += areaZ;
       --x    *normalZ3 += areaZ;
-      for coord in Dimension_Type loop
+      for coord in Coordinate_Names loop
          n0(coord) := n0(coord) + area (coord);
          n1(coord) := n1(coord) + area (coord);
          n2(coord) := n2(coord) + area (coord);
@@ -672,17 +675,17 @@ package body LULESH is
 
    procedure CalcElemNodeNormals
      (pf         : in out NodesPerElement_XYZ_Real_Array_Array;
-      elem_Nodes : in     NodesPerElement_Location_Array)
+      elem_Nodes : in     NodesPerElement_Coordinate_Array)
      with Inline
    is
       -- First face is index "0":
       face_Nodes : constant Face_NodesPerFace_NodesPerElement_Array :=
-        (0 => (0, 1, 2, 3),
-         1 => (0, 4, 5, 1),
-         2 => (1, 5, 6, 2),
-         3 => (2, 6, 7, 3),
-         4 => (3, 7, 4, 0),
-         5 => (4, 7, 6, 5));
+        ((0, 1, 2, 3),
+         (0, 4, 5, 1),
+         (1, 5, 6, 2),
+         (2, 6, 7, 3),
+         (3, 7, 4, 0),
+         (4, 7, 6, 5));
 
    begin
       --x    for (Index_t i = 0 ; i < 8 ; ++i) {
@@ -760,8 +763,8 @@ package body LULESH is
    -- {
    procedure SumElemStressesToNodeForces
      (B      : in     NodesPerElement_XYZ_Real_Array;
-      stress : in     XYZ_Real_Array;
-      f      : in out NodesPerElement_XYZ_Real_Array)
+      stress : in     Force_Vector;
+      f      : in out NodesPerElement_Force_Array)
      with Inline
    is
    begin
@@ -772,7 +775,7 @@ package body LULESH is
    --    }
       for node in B'Range (1) loop
          for coord in B'range (2) loop
-            f(node, coord) := -(stress(coord) * B(node, coord));
+            f(node)(coord) := -(stress(coord) * B(node)(coord));
          end loop;
       end loop;
    -- }
@@ -786,9 +789,9 @@ package body LULESH is
    --x                               Real_t *determ, Index_t numElem, Index_t numNode)
    --x {
    procedure IntegrateStressForElems
-     (domain  : access Domain_Record;
-      sig     : access XYZ_Real_Array;
-      determ  : access Real_Array)
+     (domain : access Domain_Record;
+      sig    : access Sig_Array;
+      determ : access Real_Array)
      with Inline is
 
       -- #if _OPENMP
@@ -805,11 +808,8 @@ package body LULESH is
       --x    Real_t fx_local[8] ;
       --x    Real_t fy_local[8] ;
       --x    Real_t fz_local[8] ;
-      numElem8 : Index_Type := domain.numElem * 8;
-      fx_elem  : Real_Array_Access;
-      fy_elem  : Real_Array_Access;
-      fz_elem  : Real_Array_Access;
-      f_local  : Force_Array (NodesPerElement_Index_Type);
+      f_elem  : NodesPerElement_Force_Vector_Array_Array_Access;
+      f_local : Force_Array (NodesPerElement_Index_Type);
    begin
       --x   if (numthreads > 1) {
       --x      fx_elem = Allocate<Real_t>(numElem8) ;
@@ -817,9 +817,7 @@ package body LULESH is
       --x      fz_elem = Allocate<Real_t>(numElem8) ;
       --x   }
       if numthreads > 1 then
-         fx_elem := Allocate_Real_Array (numElem8);
-         fy_elem := Allocate_Real_Array (numElem8);
-         fz_elem := Allocate_Real_Array (numElem8);
+         f_elem := new NodesPerElement_Force_Vector_Array_Array (0..domain.numElem-1);
       end if;
 
       ---   // loop over all elements
@@ -837,28 +835,28 @@ package body LULESH is
             elemToNode : constant NodesPerElement_Index_Array
               := domain.elements.node_indexes(k);
             B     : XYZ_NodesPerElement_Real_Array;
-            local : NodesPerElement_XYZ_Real_Array;
+            local : NodesPerElement_Coordinate_Array;
          begin
             ---     // get nodal coordinates from global arrays and copy into local arrays.
             --x     CollectDomainNodesToElemNodes(domain, elemToNode, x_local, y_local, z_local);
             CollectDomainNodesToElemNodes
-              (domain,
-               elemToNode,
-               local);
+              (domain     => domain,
+               elemToNode => elemToNode,
+               elem       => local);
 
             ---     // Volume calculation involves extra work for numerical consistency
             --x     CalcElemShapeFunctionDerivatives(x_local, y_local, z_local,
             --x                                          B, &determ[k]);
             CalcElemShapeFunctionDerivatives
-              (local,
-               B,
-               determ (k)'Access);
+              (N      => local,
+               B      => B,
+               volume => determ (k)'Access);
 
             --     CalcElemNodeNormals( B[0] , B[1], B[2],
             --                           x_local, y_local, z_local );
             CalcElemNodeNormals
-              (B,
-               local);
+              (pf         => B,
+               elem_Nodes => local);
 
             --     if (numthreads > 1) {
             if (numthreads > 1) then
@@ -869,24 +867,18 @@ package body LULESH is
                --                                     &fy_elem[k*8],
                --                                     &fz_elem[k*8] ) ;
                SumElemStressesToNodeForces
-                 ( B,
-                   sigxx (k),
-                   sigyy (k),
-                   sigzz (k),
-                   fx_elem (k*8)'Access,
-                   fy_elem (k*8)'Access,
-                   fz_elem (k*8)'Access);
+                 (b      => B,
+                  stress => sig,
+                  f      => f_elem);
                --     }
                --     else {
             else
                --        SumElemStressesToNodeForces( B, sigxx[k], sigyy[k], sigzz[k],
                --                                     fx_local, fy_local, fz_local ) ;
                SumElemStressesToNodeForces
-                 (B,
-                  sigxx (k),
-                  sigyy (k),
-                  sigzz (k),
-                  f_local);
+                 (b      => B,
+                  stress => sig,
+                  f      => f_local);
 
                --        // copy nodal force contributions to global force arrray.
                --        for( Index_t lnode=0 ; lnode<8 ; ++lnode ) {
@@ -1449,7 +1441,7 @@ package body LULESH is
    --x void CalcVolumeForceForElems(Domain& domain)
    --x {
    procedure CalcVolumeForceForElems
-     (domain : access Domain_Record) is
+     (domain : not null access Domain_Record) is
       --x    Index_t numElem = domain.numElem() ;
       numElem : Index_Type := domain.numElem;
    begin
@@ -1462,15 +1454,13 @@ package body LULESH is
             --       Real_t *sigzz  = Allocate<Real_t>(numElem) ;
             --       Real_t *determ = Allocate<Real_t>(numElem) ;
             hgcoef : Real_Type := domain.parameters.hgcoef;
-            sigxx  : Real_Array_Access := new Real_Array (0..numElem - 1);
-            sigyy  : Real_Array_Access := new Real_Array (0..numElem - 1);
-            sigzz  : Real_Array_Access := new Real_Array (0..numElem - 1);
+            sig  : Sig_Array_Access := new Sig_Array (0..numElem - 1);
             determ : Real_Array_Access := new Real_Array (0..numElem - 1);
 
          begin
             ---       /* Sum contributions to total stress tensor */
             --x       InitStressTermsForElems(domain, sigxx, sigyy, sigzz, numElem);
-            InitStressTermsForElems(domain, sigxx, sigyy, sigzz, numElem);
+            InitStressTermsForElems(domain, sig, numElem);
 
             ---       // call elemlib stress integration loop to produce nodal forces from
             ---       // material stresses.
@@ -1478,7 +1468,7 @@ package body LULESH is
             --x                                sigxx, sigyy, sigzz, determ, numElem,
             --x                                domain.numNode()) ;
             IntegrateStressForElems( domain,
-                                     sigxx, sigyy, sigzz, determ, numElem,
+                                     sig, determ, numElem,
                                      domain.numNode) ;
 
             ---       // check for negative element volume
@@ -1519,7 +1509,7 @@ package body LULESH is
 
    --x static inline void CalcForceForNodes(Domain& domain)
    --x {
-   procedure CalcForceForNodes(domain : access Domain_Record) is
+   procedure CalcForceForNodes(domain : not null access Domain_Record) is
       --   Index_t numNode = domain.numNode() ;
       numNode : Index_Type := domain.numNode;
    begin
@@ -1648,7 +1638,7 @@ package body LULESH is
 
    --x static inline
    --x void LagrangeNodal(Domain& domain)
-   procedure LagrangeNodal (domain : access Domain_Record) is
+   procedure LagrangeNodal (domain : not null access Domain_Record) is
       --x {
       -- #ifdef SEDOV_SYNC_POS_VEL_EARLY
       --    Domain_member fieldData[6] ;
@@ -1656,7 +1646,7 @@ package body LULESH is
 
       --x    const Real_t delt = domain.deltatime() ;
       --x    Real_t u_cut = domain.u_cut() ;
-      delt  : constant Duration_Type := domain.variables.deltatime;
+      delt  : constant Real_Type := domain.variables.deltatime;
       u_cut : Velocity_Type := domain.parameters.velocity_tolerance;
    begin
       ---   /* time of boundary condition evaluation is beginning of step for force and
@@ -3028,7 +3018,7 @@ package body LULESH is
    ----------------------
    -- EXPORTED (private):
    ----------------------
-   procedure LagrangeLeapFrog (domain : access Domain_Record) is
+   procedure LagrangeLeapFrog (domain : not null access Domain_Record) is
       --x {
    begin
       -- #ifdef SEDOV_SYNC_POS_VEL_LATE
@@ -3069,7 +3059,7 @@ package body LULESH is
       -- #endif
 
       --x    CalcTimeConstraintsForElems(domain);
-      CalcTimeConstraintsForElems(domain);
+      oCalcTimeConstraintsForElems(domain);
 
       -- #if USE_MPI
       -- #ifdef SEDOV_SYNC_POS_VEL_LATE
