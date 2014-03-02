@@ -36,7 +36,8 @@ package LULESH.Init is
       edgeElems   : in Element_Index_Type);
 
    --x    void SetupThreadSupportStructures();
-   procedure SetupThreadSupportStructures;
+   procedure SetupThreadSupportStructures
+     (this : in out Domain_Record);
 
    --x    void CreateRegionIndexSets(Int_t nreg, Int_t balance);
    procedure CreateRegionIndexSets

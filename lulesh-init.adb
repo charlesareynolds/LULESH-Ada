@@ -457,8 +457,8 @@ package body LULESH.Init is
       --x   Index_t meshEdgeElems = m_tp*nx ;
       ---   // initialize nodal coordinates
       --x   Index_t nidx = 0 ;
-      meshEdgeElems : constant Length_Type :=
-        Length_Type(this.variables.tp)*side_length ;
+      meshEdgeElems : constant Element_Index_Type :=
+        Element_Index_Type(this.variables.tp)*side_length ;
       node_index    : Node_Index_Type;
       t             : Coordinate_Vector;
       zidx          : Element_Index_Type;
@@ -466,7 +466,10 @@ package body LULESH.Init is
         (loc        : in Domain_Index_Type;
          node_index : in Node_Index_Type)
          return Length_Type is
-        (1.125*Length_Type((loc*side_length)+Index_Type(node_index))/meshEdgeElems)
+        (1.125 *
+           Length_Type
+             ((Element_Index_Type(loc)*side_length)+
+                  Element_Index_Type(node_index)/meshEdgeElems))
         with Inline;
    begin
       --x   Real_t tz = Real_t(1.125)*Real_t(m_planeLoc*nx)/Real_t(meshEdgeElems) ;
@@ -547,79 +550,145 @@ package body LULESH.Init is
       -- }
    end BuildMesh;
 
-   -- ////////////////////////////////////////////////////////////////////////////////
-   -- void
-   -- Domain::SetupThreadSupportStructures()
-   -- {
+   --x ////////////////////////////////////////////////////////////////////////////////
+   --x void
+   --x Domain::SetupThreadSupportStructures()
+   --x {
+   procedure SetupThreadSupportStructures
+     (this : in out Domain_Record)
+   is
    -- #if _OPENMP
    --    Index_t numthreads = omp_get_max_threads();
    -- #else
-   --    Index_t numthreads = 1;
+   --x    Index_t numthreads = 1;
    -- #endif
+      numthreads    : Index_Type := 1;
+      nodeElemCount : Node_Element_Index_Array_Access;
+   begin
+      --x   if (numthreads > 1) {
+      --x     // set up node-centered indexing of elements
+      --x     Index_t *nodeElemCount = new Index_t[numNode()] ;
+      if numthreads > 1 then
+         --- // set up node-centered indexing of elements
+         nodeElemCount := new Node_Element_Index_Array (0..this.numNode-1);
+         --x     for (Index_t i=0; i<numNode(); ++i) {
+         --x       nodeElemCount[i] = 0 ;
+         --x     }
+         for i in nodeElemCount'Range loop
+            nodeElemCount(i) := 0 ;
+         end loop;
+         --x     for (Index_t i=0; i<numElem(); ++i) {
+         --x       Index_t *nl = nodelist(i) ;
+         --x       for (Index_t j=0; j < 8; ++j) {
+         --x 	++(nodeElemCount[nl[j]] );
+         --x       }
+         --x     }
+         for i in 0..this.numElem-1 loop
+            for j in NodesPerElement_Index_Type loop
+               declare
+                  count : Element_Index_Type renames
+                    nodeElemCount(this.elements(i).node_indexes(j));
+               begin
+                  count := count + 1;
+               end;
+            end loop;
+         end loop;
+         --x     m_nodeElemStart = new Index_t[numNode()+1] ;
+         --x     m_nodeElemStart[0] = 0;
+         --x     for (Index_t i=1; i <= numNode(); ++i) {
+         --x       m_nodeElemStart[i] =
+         --x 	m_nodeElemStart[i-1] + nodeElemCount[i-1] ;
+         --x     }
+         this.variables.nodeElemStart :=
+           new Node_Element_Index_Array (0..this.numNode+1);
+         this.variables.nodeElemStart (0) := 0;
+         for i in 1..this.numNode-1 loop
+            this.variables.nodeElemStart (i) :=
+              this.variables.nodeElemStart (i-1) + nodeElemCount(i-1);
+         end loop;
 
-   --   if (numthreads > 1) {
-   --     // set up node-centered indexing of elements
-   --     Index_t *nodeElemCount = new Index_t[numNode()] ;
+         --x     m_nodeElemCornerList = new Index_t[m_nodeElemStart[numNode()]];
+         this.variables.nodeElemCornerList :=
+           new Node_Element_Index_Array (0..this.variables.nodeElemStart(
+                                         this.numNode)-1);
+         --x     for (Index_t i=0; i < numNode(); ++i) {
+         --x       nodeElemCount[i] = 0;
+         --x     }
+         ---!! Again?
+         for i in nodeElemCount'Range loop
+            nodeElemCount(i) := 0 ;
+         end loop;
 
-   --     for (Index_t i=0; i<numNode(); ++i) {
-   --       nodeElemCount[i] = 0 ;
-   --     }
+         --x     for (Index_t i=0; i < numElem(); ++i) {
+         --x       Index_t *nl = nodelist(i) ;
+         --x       for (Index_t j=0; j < 8; ++j) {
+         --x 	Index_t m = nl[j];
+         --x 	Index_t k = i*8 + j ;
+         --x 	Index_t offset = m_nodeElemStart[m] + nodeElemCount[m] ;
+         --x 	m_nodeElemCornerList[offset] = k;
+         --x 	++(nodeElemCount[m]) ;
+         --x       }
+         --x     }
+         for i in 0..this.numElem-1 loop
+            for j in NodesPerElement_Index_Type loop
+               declare
+                  m      : constant Node_Index_Type :=
+                    this.elements(i).node_indexes(j);
+                  k      : constant Node_Index_Type :=
+                    i*NODES_PER_ELEMENT + j ;
+                  offset : constant Node_Index_Type :=
+                    this.variables.nodeElemStart(m) + nodeElemCount(m) ;
+               begin
+                  this.variables.nodeElemCornerList(offset) := k;
+                  nodeElemCount(m) := nodeElemCount(m) + 1;
+               end;
+            end loop;
+         end loop;
 
-   --     for (Index_t i=0; i<numElem(); ++i) {
-   --       Index_t *nl = nodelist(i) ;
-   --       for (Index_t j=0; j < 8; ++j) {
-   -- 	++(nodeElemCount[nl[j]] );
-   --       }
-   --     }
-
-   --     m_nodeElemStart = new Index_t[numNode()+1] ;
-
-   --     m_nodeElemStart[0] = 0;
-
-   --     for (Index_t i=1; i <= numNode(); ++i) {
-   --       m_nodeElemStart[i] =
-   -- 	m_nodeElemStart[i-1] + nodeElemCount[i-1] ;
-   --     }
-   --
-   --     m_nodeElemCornerList = new Index_t[m_nodeElemStart[numNode()]];
-
-   --     for (Index_t i=0; i < numNode(); ++i) {
-   --       nodeElemCount[i] = 0;
-   --     }
-
-   --     for (Index_t i=0; i < numElem(); ++i) {
-   --       Index_t *nl = nodelist(i) ;
-   --       for (Index_t j=0; j < 8; ++j) {
-   -- 	Index_t m = nl[j];
-   -- 	Index_t k = i*8 + j ;
-   -- 	Index_t offset = m_nodeElemStart[m] + nodeElemCount[m] ;
-   -- 	m_nodeElemCornerList[offset] = k;
-   -- 	++(nodeElemCount[m]) ;
-   --       }
-   --     }
-
-   --     Index_t clSize = m_nodeElemStart[numNode()] ;
-   --     for (Index_t i=0; i < clSize; ++i) {
-   --       Index_t clv = m_nodeElemCornerList[i] ;
-   --       if ((clv < 0) || (clv > numElem()*8)) {
-   -- 	fprintf(stderr,
-   -- 		"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!\n");
-   -- #if USE_MPI
-   -- 	MPI_Abort(MPI_COMM_WORLD, -1);
-   -- #else
-   -- 	exit(-1);
-   -- #endif
-   --       }
-   --     }
-
-   --     delete [] nodeElemCount ;
-   --   }
-   --   else {
-   --     // These arrays are not used if we're not threaded
-   --     m_nodeElemStart = NULL;
-   --     m_nodeElemCornerList = NULL;
-   --   }
-   -- }
+         --x     Index_t clSize = m_nodeElemStart[numNode()] ;
+         --x     for (Index_t i=0; i < clSize; ++i) {
+         --x       Index_t clv = m_nodeElemCornerList[i] ;
+         --x       if ((clv < 0) || (clv > numElem()*8)) {
+         --x 	fprintf(stderr,
+         --x 		"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!\n");
+         -- #if USE_MPI
+         -- 	MPI_Abort(MPI_COMM_WORLD, -1);
+         -- #else
+         --x 	exit(-1);
+         -- #endif
+         --x       }
+         --x     }
+         declare
+            clSize : constant Node_Index_Type :=
+              this.variables.nodeElemStart(this.numNode);
+         begin
+            for i in 0..clSize-1 loop
+               declare
+                  clv : constant Node_Index_Type :=
+                    this.variables.nodeElemCornerList(i);
+               begin
+                  if clv < 0 or clv > this.numElem*NODES_PER_ELEMENT then
+                     raise Coding_Error with
+                       "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"&
+                       "  i:" & i'Img & " clv:" & clv'Img;
+                  end if;
+               end;
+            end loop;
+         end;
+         --x     delete [] nodeElemCount ;
+         Free (nodeElemCount);
+         --x   }
+         --x   else {
+      else
+         ---     // These arrays are not used if we're not threaded
+         --x     m_nodeElemStart = NULL;
+         --x     m_nodeElemCornerList = NULL;
+         this.variables.nodeElemStart      := null;
+         this.variables.nodeElemCornerList := null;
+         --x   }
+      end if;
+      --x }
+   end SetupThreadSupportStructures;
 
 
    -- ////////////////////////////////////////////////////////////////////////////////
@@ -679,7 +748,6 @@ package body LULESH.Init is
    --   if (m_planeLoc == 0)
    --     m_symmZ.resize(edgeNodes*edgeNodes);
    -- }
-
 
    -- ////////////////////////////////////////////////////////////////////////////////
    -- void
@@ -1317,12 +1385,12 @@ package body LULESH.Init is
       begin
          -- Always false:
          if myRank < remainder then
-            my_domain := myRank * (1 + quotient) ;
+            my_domain := Domain_Index_Type(myRank * (1 + quotient)) ;
          else
-            -- my_domain := 0 * 2 + (myRank - 0) * 1:
+            -- my_domain := 0 * (1 + 1) + (myRank - 0) * 1:
             -- my_domain := myRank:
-            my_domain := remainder * (1 + quotient) +
-              (myRank - remainder) * quotient ;
+            my_domain := Domain_Index_Type(remainder * (1 + quotient) +
+              (myRank - remainder) * quotient);
          end if;
       end;
       --x    *col = myDom % dx ;

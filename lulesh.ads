@@ -87,10 +87,19 @@ package LULESH is
    type Real_Array is array (Index_Type range <>) of Real_Type;
    --     type Real_Array_Access is access Real_Array;
    type Index_Array is array (Index_Type range <>) of Index_Type;
-   type Element_Index_Array is array (Element_Index_Type range <>) of Element_Index_Type;
+   type Element_Index_Array is array (Element_Index_Type range <>)
+     of Element_Index_Type;
    type Element_Index_Array_Access is access Element_Index_Array;
 
-   type Region_Bin_End_Array is array (Region_Index_Type range <>) of Cost_Type;
+   type Node_Node_Index_Array is array (Node_Index_Type range <>)
+     of Node_Index_Type;
+   type Node_Node_Index_Array_Access is access Node_Node_Index_Array;
+   type Node_Element_Index_Array is array (Node_Index_Type range <>)
+     of Element_Index_Type;
+   type Node_Element_Index_Array_Access is access Node_Element_Index_Array;
+
+   type Region_Bin_End_Array is array (Region_Index_Type range <>)
+     of Cost_Type;
    type Region_Bin_End_Array_Access is access Region_Bin_End_Array;
 
    --- Cartesian coordinates:
@@ -498,6 +507,13 @@ package LULESH is
       rowLoc   : Domain_Index_Type;
       planeLoc : Domain_Index_Type;
       tp       : Domain_Index_Type;
+
+      ---    // These arrays are not used if we're not threaded
+      ---    // OMP hack
+      --    Index_t *m_nodeElemStart ;
+      --    Index_t *m_nodeElemCornerList ;
+      nodeElemStart      : Node_Element_Index_Array_Access;
+      nodeElemCornerList : Node_Element_Index_Array_Access;
    end record;
 
    type Parameters_Record is record
@@ -559,11 +575,6 @@ package LULESH is
       maxPlaneSize : Element_Index_Type;
       maxEdgeSize  : Element_Index_Type;
 
-      ---    // These arrays are not used if we're not threaded
-      ---    // OMP hack
-      --    Index_t *m_nodeElemStart ;
-      --    Index_t *m_nodeElemCornerList ;
-
       ---    // Used in setup
       --x    Index_t m_rowMin, m_rowMax;
       --x    Index_t m_colMin, m_colMax;
@@ -574,7 +585,6 @@ package LULESH is
       colMax   : Element_Index_Type;
       planeMin : Element_Index_Type;
       planeMax : Element_Index_Type;
-
    end record;
 
 private
