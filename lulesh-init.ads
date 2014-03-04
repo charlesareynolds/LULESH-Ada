@@ -6,12 +6,12 @@ package LULESH.Init is
    --x           Index_t nx, Int_t tp, Int_t nr, Int_t balance, Int_t cost);
    function Create
      (numRanks    : in Rank_Count_Range;
-      colLoc      : in Domain_Index_Type;
-      rowLoc      : in Domain_Index_Type;
-      planeLoc    : in Domain_Index_Type;
-      side_length : in Element_Index_Type;
-      tp          : in Domain_Index_Type;
-      nr          : in Region_Index_Type;
+      colLoc      : in Domain_Index;
+      rowLoc      : in Domain_Index;
+      planeLoc    : in Domain_Index;
+      side_length : in Element_Index;
+      tp          : in Domain_Index;
+      nr          : in Region_Index;
       balance     : in Balance_Type;
       cost        : in Cost_Type)
       return Domain_Record;
@@ -23,17 +23,17 @@ package LULESH.Init is
    procedure InitMeshDecomp
      (numRanks         : in Rank_Count_Range;
       myRank           : in Rank_Type;
-      domain_column    : out Domain_Index_Type;
-      domain_row       : out Domain_Index_Type;
-      domain_plane     : out Domain_Index_Type;
-      domains_per_side : out Domain_Index_Type);
+      domain_column    : out Domain_Index;
+      domain_row       : out Domain_Index;
+      domain_plane     : out Domain_Index;
+      domains_per_side : out Domain_Index);
 
    --x    void BuildMesh(Int_t nx, Int_t edgeNodes, Int_t edgeElems);
    procedure BuildMesh
      (this        : in out Domain_Record;
-      side_length : in Element_Index_Type;
-      edgeNodes   : in Node_Index_Type;
-      edgeElems   : in Element_Index_Type);
+      side_length : in Element_Index;
+      edgeNodes   : in Node_Index;
+      edgeElems   : in Element_Index);
 
    --x    void SetupThreadSupportStructures();
    procedure SetupThreadSupportStructures
@@ -42,27 +42,27 @@ package LULESH.Init is
    --x    void CreateRegionIndexSets(Int_t nreg, Int_t balance);
    procedure CreateRegionIndexSets
      (this    : in out Domain_Record;
-      nreg    : in Region_Index_Type;
+      nreg    : in Region_Index;
       balance : in Balance_Type);
 
    --x    void SetupCommBuffers(Int_t edgeNodes);
    procedure SetupCommBuffers
      (this      : in out Domain_Record;
-      edgeNodes : in Node_Index_Type);
+      edgeNodes : in Node_Index);
 
    --x    void SetupSymmetryPlanes(Int_t edgeNodes);
    procedure SetupSymmetryPlanes
      (this      : in out Domain_Record;
-      edgeNodes : in Node_Index_Type);
+      edgeNodes : in Node_Index);
 
    --x    void SetupElementConnectivities(Int_t edgeElems);
    procedure SetupElementConnectivities
      (this      : in out Domain_Record;
-      edgeElems : in Element_Index_Type);
+      edgeElems : in Element_Index);
 
    --x    void SetupBoundaryConditions(Int_t edgeElems);
    procedure SetupBoundaryConditions
      (this      : in out Domain_Record;
-      edgeElems : in Element_Index_Type);
+      edgeElems : in Element_Index);
 
 end LULESH.Init;

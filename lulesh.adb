@@ -211,12 +211,13 @@ package body LULESH is
    ----------------------
    procedure TimeIncrement (domain : in out Domain_Record) is
       targetdt : Time_Span;
+      use ART;
    begin
       --x    Real_t targetdt = domain.stoptime() - domain.time() ;
       targetdt := domain.variables.stoptime - domain.variables.current_time;
 
       --x    if ((domain.dtfixed() <= Real_t(0.0)) && (domain.cycle() != Int_t(0))) {
-      if domain.variables.dtfixed <= 0.0 and domain.variables.cycle /= 0 then
+      if domain.variables.dtfixed <= Time_Span_Zero and domain.variables.cycle /= 0 then
          --x       Real_t ratio ;
          --x       Real_t olddt = domain.deltatime() ;
 
@@ -226,7 +227,7 @@ package body LULESH is
          declare
             ratio  : Real_Type;
             olddt  : Time_Span := domain.variables.deltatime;
-            gnewdt : Time_Span := 1.0e+20;
+            gnewdt : Time_Span := Time_Span_Last;
             newdt  : Time_Span;
          begin
             --x       if (domain.dtcourant() < gnewdt) {
@@ -265,7 +266,7 @@ package body LULESH is
                if ratio < domain.variables.delta_time_multiplier_lower_bound then
                   newdt := olddt;
                elsif ratio > domain.variables.delta_time_multiplier_upper_bound then
-                  newdt := olddt * Time_Span(domain.variables.delta_time_multiplier_upper_bound);
+                  newdt := olddt * domain.variables.delta_time_multiplier_upper_bound;
                end if;
 
                --x       if (newdt > domain.dtmax()) {
@@ -335,8 +336,7 @@ package body LULESH is
    --x                              Index_t numElem)
    --x {
    procedure InitStressTermsForElems
-     (domain : access Domain_Record;
-      sig    : out NodesPerElement_Force_Vector_Array)
+     (domain : access Domain_Record)
      with Inline
    is
       ---    //
@@ -347,10 +347,10 @@ package body LULESH is
       --x    for (Index_t i = 0 ; i < numElem ; ++i){
       --x       sigxx[i] = sigyy[i] = sigzz[i] =  - domain.p(i) - domain.q(i) ;
       --x    }
-      for i in sig'Range loop
-         sig (i) := (others =>
-                     - domain.elements.static_pressure(i)
-                     - domain.elements.dynamic_pressure(i));
+      for element in domain.elements'Range loop
+         domain.elements(element).sig := (others => Force_Magnitude (
+                     - domain.elements(element).static_pressure
+                     - domain.elements(element).dynamic_pressure));
       end loop;
       --x }
    end InitStressTermsForElems;
@@ -365,7 +365,7 @@ package body LULESH is
    --                                        Real_t* const volume )
    procedure CalcElemShapeFunctionDerivatives
      (N      : in NodesPerElement_Coordinate_Array;
-      b      : out XYZ_NodesPerElement_Real_Array;
+      b      : out NodesPerElement_XEZ_Real_Array;
       volume : out Real_Type)
      with Inline
    is
@@ -888,14 +888,14 @@ package body LULESH is
                --           domain.fz(gnode) += fz_local[lnode];
                --        }
                --     }
-               for lnode in NodesPerElement_Range loop
+               for local_node in NodesPerElement_Range loop
                   declare
-                     gnode : constant Index_Type := elemToNode (lnode);
+                     global_node : constant Index_Type := elemToNode (local_node);
                   begin
                      for coord in Coordinate_Names loop
-                        domain.nodes.force (gnode)(coord) :=
-                          domain.nodes.force (gnode)(coord) +
-                          f_local(lnode)(coord);
+                        domain.nodes.force (global_node)(coord) :=
+                          domain.nodes.force (global_node)(coord) +
+                          f_local(local_node)(coord);
                      end loop;
                   end;
                end loop;
@@ -1454,8 +1454,8 @@ package body LULESH is
             --       Real_t *sigzz  = Allocate<Real_t>(numElem) ;
             --       Real_t *determ = Allocate<Real_t>(numElem) ;
             hgcoef : Real_Type := domain.parameters.hgcoef;
-            sig  : Sig_Array_Access := new Sig_Array (0..numElem - 1);
-            determ : Real_Array_Access := new Real_Array (0..numElem - 1);
+            sig    : Sig_Array_Access  := new Sig_Array '(0..numElem - 1);
+            determ : Volune_Array_Access := new Volume_Array (0..numElem - 1);
 
          begin
             ---       /* Sum contributions to total stress tensor */
@@ -1646,7 +1646,7 @@ package body LULESH is
 
       --x    const Real_t delt = domain.deltatime() ;
       --x    Real_t u_cut = domain.u_cut() ;
-      delt  : constant Real_Type := domain.variables.deltatime;
+      delt  : constant Time_Span := domain.variables.deltatime;
       u_cut : Velocity_Type := domain.parameters.velocity_tolerance;
    begin
       ---   /* time of boundary condition evaluation is beginning of step for force and

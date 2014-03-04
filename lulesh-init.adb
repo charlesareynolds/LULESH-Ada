@@ -357,7 +357,7 @@ package body LULESH.Init is
       this.variables.dtcourant       := 1.0e+20;
       this.variables.dthydro         := 1.0e+20;
       this.variables.dtmax           := 1.0e-2;
-      this.variables.current_time            := 0.0;
+      this.variables.current_time    := Time_Span_Zero;
       this.variables.cycle           := 0;
 
       ---    // initialize field data
@@ -424,7 +424,8 @@ package body LULESH.Init is
       --x    }
       declare
          ebase : constant Energy_Type := 3.948746e+7;
-         scale : constant Real_Type   := Real_Type(side_length)*Real_Type(this.variables.tp)/45.0;
+         scale : constant Real_Type   :=
+           Real_Type(side_length)*Real_Type(this.variables.tp)/45.0;
          einit : constant Energy_Type := ebase*Energy_Type(scale**3);
       begin
          if (this.variables.rowLoc
