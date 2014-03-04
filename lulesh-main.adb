@@ -13,7 +13,7 @@ procedure Lulesh.main is
    --x    Int_t numRanks ;
    --x    Int_t myRank ;
    --x    struct cmdLineOpts opts;
-   locDom   : Domain_Access;
+   locDom   : Domain_Record;
    numRanks : Rank_Type;
    myRank   : Rank_Type;
    opts     : LULESH.Util.cmdLineOpts;
@@ -96,10 +96,10 @@ begin
    ---    // Set up the mesh and decompose. Assumes regular cubes for now
    --x    Int_t col, row, plane, side;
    declare
-      domain_col       : Domain_Index_Type;
-      domain_row       : Domain_Index_Type;
-      domain_plane     : Domain_Index_Type;
-      domains_per_side : Domain_Index_Type;
+      domain_col       : Domain_Index;
+      domain_row       : Domain_Index;
+      domain_plane     : Domain_Index;
+      domains_per_side : Domain_Index;
    begin
       --x    InitMeshDecomp(numRanks, myRank, &col, &row, &domain_, &side);
       LULESH.Init.InitMeshDecomp
@@ -162,7 +162,7 @@ begin
    --x                 locDom->cycle(), double(locDom->time()), double(locDom->deltatime()) ) ;
    --x       }
    --x    }
-   while locDom.variables.time < locDom.variables.stoptime and
+   while locDom.variables.current_time < locDom.variables.stoptime and
      locDom.variables.cycle < opts.its loop
 
       TimeIncrement (locDom);
@@ -170,7 +170,7 @@ begin
 
       if opts.showProg and not opts.quiet and myRank = 0 then
          ATI.Put_Line ("cycle = " & locDom.variables.cycle'Img
-                       & ", time = "& locDom.variables.time'Img
+                       & ", current_time = "& locDom.variables.current_time'Img
                        & ", dt = " & locDom.variables.deltatime'Img);
       end if;
    end loop;
