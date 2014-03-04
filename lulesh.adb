@@ -209,11 +209,11 @@ package body LULESH is
    ----------------------
    -- EXPORTED (private):
    ----------------------
-   procedure TimeIncrement (domain : not null access Domain_Record) is
-      targetdt : Duration_Type;
+   procedure TimeIncrement (domain : in out Domain_Record) is
+      targetdt : Time_Span;
    begin
       --x    Real_t targetdt = domain.stoptime() - domain.time() ;
-      targetdt := domain.variables.stoptime - domain.variables.time;
+      targetdt := domain.variables.stoptime - domain.variables.current_time;
 
       --x    if ((domain.dtfixed() <= Real_t(0.0)) && (domain.cycle() != Int_t(0))) {
       if domain.variables.dtfixed <= 0.0 and domain.variables.cycle /= 0 then
@@ -225,9 +225,9 @@ package body LULESH is
          --x       Real_t newdt ;
          declare
             ratio  : Real_Type;
-            olddt  : Duration_Type := domain.variables.deltatime;
-            gnewdt : Duration_Type := 1.0e+20;
-            newdt  : Duration_Type;
+            olddt  : Time_Span := domain.variables.deltatime;
+            gnewdt : Time_Span := 1.0e+20;
+            newdt  : Time_Span;
          begin
             --x       if (domain.dtcourant() < gnewdt) {
             --x          gnewdt = domain.dtcourant() / Real_t(2.0) ;
@@ -260,12 +260,12 @@ package body LULESH is
             --x             newdt = olddt*domain.deltatimemultub() ;
             --x          }
             --x       }
-            ratio := newdt / olddt;
+            ratio := Real_Type (newdt / olddt);
             if ratio >= 1.0 then
-               if ratio < domain.variables.deltatimemultlb then
+               if ratio < domain.variables.delta_time_multiplier_lower_bound then
                   newdt := olddt;
-               elsif ratio > domain.variables.deltatimemultub then
-                  newdt := olddt * domain.variables.deltatimemultub;
+               elsif ratio > domain.variables.delta_time_multiplier_upper_bound then
+                  newdt := olddt * Time_Span(domain.variables.delta_time_multiplier_upper_bound);
                end if;
 
                --x       if (newdt > domain.dtmax()) {
@@ -299,7 +299,7 @@ package body LULESH is
       end if;
 
       --x    domain.time() += domain.deltatime() ;
-      domain.variables.time := domain.variables.time + domain.variables.deltatime;
+      domain.variables.current_time := domain.variables.current_time + domain.variables.deltatime;
 
       --x    ++domain.cycle() ;
       domain.variables.cycle := domain.variables.cycle + 1;
@@ -737,7 +737,7 @@ package body LULESH is
       --x                   &pfx[5], &pfy[5], &pfz[5],
       --x                   x[4], y[4], z[4], x[7], y[7], z[7],
       --x                   x[6], y[6], z[6], x[5], y[5], z[5]);
-      for face in Face_Index_Type loop
+      for face in Face_Index loop
          SumElemFaceNormal
            (n0 => pf (face_Nodes (face, 0)),
             n1 => pf (face_Nodes (face, 1)),
@@ -809,7 +809,7 @@ package body LULESH is
       --x    Real_t fy_local[8] ;
       --x    Real_t fz_local[8] ;
       f_elem  : NodesPerElement_Force_Vector_Array_Array_Access;
-      f_local : Force_Array (NodesPerElement_Index_Type);
+      f_local : Force_Array (NodesPerElement_Range);
    begin
       --x   if (numthreads > 1) {
       --x      fx_elem = Allocate<Real_t>(numElem8) ;
@@ -888,7 +888,7 @@ package body LULESH is
                --           domain.fz(gnode) += fz_local[lnode];
                --        }
                --     }
-               for lnode in NodesPerElement_Index_Type loop
+               for lnode in NodesPerElement_Range loop
                   declare
                      gnode : constant Index_Type := elemToNode (lnode);
                   begin
@@ -3018,7 +3018,7 @@ package body LULESH is
    ----------------------
    -- EXPORTED (private):
    ----------------------
-   procedure LagrangeLeapFrog (domain : not null access Domain_Record) is
+   procedure LagrangeLeapFrog (domain : in out Domain_Record) is
       --x {
    begin
       -- #ifdef SEDOV_SYNC_POS_VEL_LATE
