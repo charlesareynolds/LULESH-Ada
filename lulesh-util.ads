@@ -13,8 +13,8 @@ package LULESH.Util is
    --x };
    type cmdLineOpts is record
       its         : Int_t;
-      side_length : Element_Index_Type;
-      numReg      : Int_t;
+      side_length : Element_Index;
+      numReg      : Region_Index;
       numFiles    : Int_t;
       showProg    : Boolean;
       quiet       : Boolean;
@@ -37,9 +37,9 @@ package LULESH.Util is
    --x                                Int_t numRanks);
    procedure VerifyAndWriteFinalOutput
      (elapsed_time : in AC.Day_Duration;
-      locDom       : in Domain_Access;
-      side_length  : in Element_Index_Type;
-      numRanks     : Int_t);
+      locDom       : in out Domain_Record;
+      side_length  : in Element_Index;
+      numRanks     : in Rank_Type);
 
 
 end LULESH.Util;
