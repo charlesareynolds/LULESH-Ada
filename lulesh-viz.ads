@@ -3,9 +3,9 @@ package LULESH.Viz is
 
    --x void DumpToVisit(Domain& domain, int numFiles, int myRank, int numRanks);
    procedure DumpToVisit
-     (domainn  : not null access Domain_Record;
+     (domainn  : in out Domain_Record;
       numFiles : in Int_t;
-      myRank   : in Int_t;
-      numRanks : in Int_t);
+      myRank   : in Rank_Type;
+      numRanks : in Rank_Type);
 
 end LULESH.Viz;
