@@ -1,6 +1,8 @@
 with Ada.Calendar;
 with Ada.Containers.Vectors;
 with Ada.Numerics.Generic_Elementary_Functions;
+with Ada.Numerics.Generic_Real_Arrays;
+
 with Interfaces;
 
 package LULESH is
@@ -62,14 +64,14 @@ package LULESH is
    type Cost_Type    is new Natural;
    ---------------------------------------
 
-   type Element_Index_Type         is new Index_Type;
-   type Region_Index_Type          is new Index_Type;
-   type Bisect_Range               is new Index_Type range 0..1;
-   type Domain_Index_Type          is new Index_Type;
+   type Element_Index is new Index_Type;
+   type Region_Index  is new Index_Type;
+   type Bisect_Range  is new Index_Type range 0..1;
+   type Domain_Index  is new Index_Type;
 
    type Rank_Type              is new Natural;
    subtype Process_ID_Type     is Rank_Type;
-   subtype Rank_Count_Range    is Rank_Type range 1..Rank_Type'Last
+   subtype Rank_Count_Range    is Rank_Type range 1..Rank_Type'Last;
    subtype Process_Count_Range is Rank_Count_Range;
 
    --- Looking down on element:
@@ -77,28 +79,40 @@ package LULESH is
    --- 5-6-7-8 are nodes directly above each.
    NODES_PER_ELEMENT : constant := 8;
    NODES_PER_FACE    : constant := 4;
-   type Node_Index_Type               is new Index_Type;
-   subtype NodesPerElement_Index_Type is Node_Index_Type range 0..NODES_PER_ELEMENT-1;
-   subtype NodesPerFace_Index_Type    is Node_Index_Type range 0..NODES_PER_FACE-1;
+   type Node_Index               is new Index_Type;
+   subtype NodesPerElement_Range is Node_Index range 0..NODES_PER_ELEMENT-1;
+   subtype NodesPerFace_Range    is Node_Index range 0..NODES_PER_FACE-1;
 
    FACES_PER_ELEMENT : constant := 6;
-   type Face_Index_Type is new Index_Type range 0..FACES_PER_ELEMENT-1;
+   type Face_Range is new Index_Type range 0..FACES_PER_ELEMENT-1;
 
    type Real_Array is array (Index_Type range <>) of Real_Type;
    --     type Real_Array_Access is access Real_Array;
    type Index_Array is array (Index_Type range <>) of Index_Type;
-   type Element_Index_Array is array (Element_Index_Type range <>) of Element_Index_Type;
+   type Element_Index_Array is array (Element_Index range <>)
+     of Element_Index;
    type Element_Index_Array_Access is access Element_Index_Array;
 
-   type Region_Bin_End_Array is array (Region_Index_Type range <>) of Cost_Type;
+   type Node_Node_Index_Array is array (Node_Index range <>)
+     of Node_Index;
+   type Node_Node_Index_Array_Access is access Node_Node_Index_Array;
+   type Node_Element_Index_Array is array (Node_Index range <>)
+     of Element_Index;
+   type Node_Element_Index_Array_Access is access Node_Element_Index_Array;
+
+   type Region_Bin_End_Array is array (Region_Index range <>)
+     of Cost_Type;
    type Region_Bin_End_Array_Access is access Region_Bin_End_Array;
 
    --- Cartesian coordinates:
    --- X is positive in direction node 4 -> node 1
    --- Y is positive in direction node 4 -> node 3
    --- X is positive in direction node 4 -> node 8
-   type Cartesian_Axes is (X, Y, Z);
-   subtype Cartesian_Magnitude is Real_Type;
+   subtype Cartesian_Axes is integer range 1..3;
+   X : constant Cartesian_Axes := 1;
+   Y : constant Cartesian_Axes := 2;
+   Z : constant Cartesian_Axes := 3;
+   -- type Cartesian_Axes is (X, Y, Z);
 
    --- Natural Coordinates (isoparametric representation):
    --- Xi   is positive in direction +Y: from face 1584 to 2673.
@@ -107,16 +121,16 @@ package LULESH is
    type Natural_Axes is (Xi, Eta, Zeta);
    Et : constant Natural_Axes := Eta;
    Ze : constant Natural_Axes := Zeta;
-   subtype Natural_Magnitude is Real_Type range -1.0 .. 1.0;
+   subtype Natural_Magnitude_Range is Real_Type range -1.0 .. 1.0;
 
    type FacesPerNode_Element_Index_Array is
-     array (Face_Index_Type) of Element_Index_Type;
+     array (Face_Range) of Element_Index;
    type NodesPerElement_Index_Array is
-     array (NodesPerElement_Index_Type) of Node_Index_Type;
+     array (NodesPerElement_Range) of Node_Index;
    type NodesPerElement_Index_Array_Array is array
-     (Element_Index_Type range <>) of NodesPerElement_Index_Array;
+     (Element_Index range <>) of NodesPerElement_Index_Array;
    type Face_NodesPerFace_NodesPerElement_Array is array
-     (Face_Index_Type, NodesPerFace_Index_Type) of NodesPerElement_Index_Type;
+     (Face_Range, NodesPerFace_Range) of NodesPerElement_Range;
 
    type Domain_Record is private;
    type Domain_Access is access Domain_Record;
@@ -163,55 +177,26 @@ package LULESH is
    --x #define XI_M_SYMM   0x00001
    --x #define XI_M_FREE   0x00002
    --x #define XI_M_COMM   0x00004
-   XI_M      : constant := 2#0000_0000_0000_0000_0111#;
-   XI_M_SYMM : constant := 2#0000_0000_0000_0000_0001#;
-   XI_M_FREE : constant := 2#0000_0000_0000_0000_0010#;
-   XI_M_COMM : constant := 2#0000_0000_0000_0000_0100#;
-
    --x #define XI_P        0x00038
    --x #define XI_P_SYMM   0x00008
    --x #define XI_P_FREE   0x00010
    --x #define XI_P_COMM   0x00020
-   XI_P      : constant := 2#0000_0000_0000_0011_1000#;
-   XI_P_SYMM : constant := 2#0000_0000_0000_0000_1000#;
-   XI_P_FREE : constant := 2#0000_0000_0000_0001_0000#;
-   XI_P_COMM : constant := 2#0000_0000_0000_0010_0000#;
-
    --x #define ETA_M       0x001c0
    --x #define ETA_M_SYMM  0x00040
    --x #define ETA_M_FREE  0x00080
    --x #define ETA_M_COMM  0x00100
-   ETA_M      : constant := 2#0000_0000_0001_1100_0000#;
-   ETA_M_SYMM : constant := 2#0000_0000_0000_0100_0000#;
-   ETA_M_FREE : constant := 2#0000_0000_0000_1000_0000#;
-   ETA_M_COMM : constant := 2#0000_0000_0001_0000_0000#;
-
    --x #define ETA_P       0x00e00
    --x #define ETA_P_SYMM  0x00200
    --x #define ETA_P_FREE  0x00400
    --x #define ETA_P_COMM  0x00800
-   ETA_P      : constant := 2#0000_0000_1110_0000_0000#;
-   ETA_P_SYMM : constant := 2#0000_0000_0010_0000_0000#;
-   ETA_P_FREE : constant := 2#0000_0000_0100_0000_0000#;
-   ETA_P_COMM : constant := 2#0000_0000_1000_0000_0000#;
-
    --x #define ZETA_M      0x07000
    --x #define ZETA_M_SYMM 0x01000
    --x #define ZETA_M_FREE 0x02000
    --x #define ZETA_M_COMM 0x04000
-   ZETA_M      : constant := 2#0000_0111_0000_0000_0000#;
-   ZETA_M_SYMM : constant := 2#0000_0001_0000_0000_0000#;
-   ZETA_M_FREE : constant := 2#0000_0010_0000_0000_0000#;
-   ZETA_M_COMM : constant := 2#0000_0100_0000_0000_0000#;
-
    --x #define ZETA_P      0x38000
    --x #define ZETA_P_SYMM 0x08000
    --x #define ZETA_P_FREE 0x10000
    --x #define ZETA_P_COMM 0x20000
-   ZETA_P      : constant := 2#0011_1000_0000_0000_0000#;
-   ZETA_P_SYMM : constant := 2#0000_1000_0000_0000_0000#;
-   ZETA_P_FREE : constant := 2#0001_0000_0000_0000_0000#;
-   ZETA_P_COMM : constant := 2#0010_0000_0000_0000_0000#;
 
    --- // MPI Message Tags
    --x #define MSG_COMM_SBN      1024
@@ -264,18 +249,27 @@ package LULESH is
    --    bool symmYempty()          { return m_symmY.empty(); }
    --    bool symmZempty()          { return m_symmZ.empty(); }
 
-   --    //
-   --    // Element-centered
-   --    //
-   --    Index_t*  nodelist(Index_t idx)    { return &m_nodelist[Index_t(8)*idx] ; }
+   ---    //
+   ---    // Element-centered
+   ---    //
+   --x    Index_t*  nodelist(Index_t idx)    { return &m_nodelist[Index_t(8)*idx] ; }
 
-   --    Index_t nodeElemCount(Index_t idx)
-   --    { return m_nodeElemStart[idx+1] - m_nodeElemStart[idx] ; }
-
-   --    Index_t *nodeElemCornerList(Index_t idx)
-   --    { return &m_nodeElemCornerList[m_nodeElemStart[idx]] ; }
-
-
+   --x    Index_t nodeElemCount(Index_t idx)
+   --x    { return m_nodeElemStart[idx+1] - m_nodeElemStart[idx] ; }
+   --x    Index_t *nodeElemCornerList(Index_t idx)
+   --x    { return &m_nodeElemCornerList[m_nodeElemStart[idx]] ; }
+--     function nodeElemCount
+--       (this : in Domain_Record;
+--        idx  : in Index_Type)
+--        return Index_Type is
+--       (this.nodeElemStart(idx+1) - this.nodeElemStart(idx))
+--     with inline;
+--     function nodeElemCornerList
+--       (this : in Domain_Record;
+--        idx  : in Index_Type)
+--        return Corner_List is
+--       (this.nodeElemCornerList(this.nodeElemStart(idx)..this.nodeElemStart(idx+1)))
+--     with inline;
 
    --    //
    --    // MPI-Related additional data
@@ -293,51 +287,60 @@ package LULESH is
 
 
    --   private:
+   --- International System of Units:
+   type SI_Type is new Real_Type;
 
-   type Acceleration_Type is new Real_Type;
-   type Duration_Type          is new Real_Type;
-   type Energy_Type            is new Real_Type;
-   type Force_Type        is new Real_Type;
-   type Gradient_Type     is new Real_Type;
-   type Length_Type            is new Real_Type;
-   type Mass_Type              is new Real_Type;
-   type Pressure_Type          is new Real_Type;
---     type Sig_Type          is new Real_Type;
-   type Time_Type              is new Real_Type;
-   type Velocity_Type          is new Real_Type;
-   type Volume_Type            is new Real_Type;
+   type Acceleration_Type is new SI_Type;
+   type Energy_Type       is new SI_Type;
+   type Force_Type        is new SI_Type;
+   type Gradient_Type     is new SI_Type;
+   type Length_Type       is new SI_Type;
+   type Mass_Type         is new SI_Type;
+   type Pressure_Type     is new SI_Type;
+   --     type Sig_Type   is new SI_Type;
+   type Time         is new SI_Type;
+   type Time_Span    is new SI_Type;
+   type Velocity_Type     is new SI_Type;
+   type Volume_Type       is new SI_Type;
 
-   subtype Size_Type       is Element_Index_Type;
+   subtype Size_Type       is Element_Index;
+
+   function "+"  (Left : Time;      Right : Time_Span) return Time;
+   function "+"  (Left : Time_Span; Right : Time)      return Time;
+   function "-"  (Left : Time;      Right : Time_Span) return Time;
+   function "-"  (Left : Time;      Right : Time)      return Time_Span;
 
    type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration_Type;
    type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;
    type Force_Vector         is array (Cartesian_Axes) of Force_Type;
-   type Gradient_Vector        is array (Natural_Axes)   of Gradient_Type;
-   type Coordinate_Vector      is array (Cartesian_Axes) of Length_Type;
---     type Sig_Vector             is array (Cartesian_Axes) of Sig_Type;
+   type Gradient_Vector      is array (Natural_Axes)   of Gradient_Type;
+   package Length_Matrices   is new Ada.Numerics.Generic_Real_Arrays (Length_Type);
+   type Coordinate_Vector    is new Length_Matrices.Real_Vector (Cartesian_Axes);
+--   type Coordinate_Vector    is array (Cartesian_Axes) of Length_Type;
+   --     type Sig_Vector    is array (Cartesian_Axes) of Sig_Type;
    type Strain_Vector        is array (Cartesian_Axes) of Force_Type;
    type Velocity_Vector      is array (Cartesian_Axes) of Velocity_Type;
 
---     type Acceleration_Array is array (Node_Index_Type range <>) of Acceleration_Vector;
---     type Force_Array        is array (Node_Index_Type range <>) of Force_Type;
---     type Force_Vector_Array is array (Node_Index_Type range <>) of Force_Vector;
---     type Gradient_Array     is array (Node_Index_Type range <>) of Gradient_Vector;
-   type Coordinate_Array   is array (Node_Index_Type range <>) of Coordinate_Vector;
---     type Mass_Array         is array (Node_Index_Type range <>) of Mass_Type;
---     type Sig_Array          is array (Node_Index_Type range <>) of Sig_Vector;
---     type Strain_Array       is array (Node_Index_Type range <>) of Strain_Vector;
---     type Velocity_Array     is array (Node_Index_Type range <>) of Velocity_Vector;
+   --     type Acceleration_Array is array (Node_Index range <>) of Acceleration_Vector;
+--     type Force_Array        is array (Node_Index range <>) of Force_Type;
+--     type Force_Vector_Array is array (Node_Index range <>) of Force_Vector;
+--     type Gradient_Array     is array (Node_Index range <>) of Gradient_Vector;
+   type Coordinate_Array   is array (Node_Index range <>) of Coordinate_Vector;
+--     type Mass_Array         is array (Node_Index range <>) of Mass_Type;
+--     type Sig_Array          is array (Node_Index range <>) of Sig_Vector;
+--     type Strain_Array       is array (Node_Index range <>) of Strain_Vector;
+--     type Velocity_Array     is array (Node_Index range <>) of Velocity_Vector;
 --
    type NodesPerElement_Coordinate_Array is new Coordinate_Array
-     (NodesPerElement_Index_Type);
+     (NodesPerElement_Range);
 --     type NodesPerElement_Force_Array is new Force_Array
---       (NodesPerElement_Index_Type);
+--       (NodesPerElement_Range);
 --     type NodesPerElement_Force_Vector_Array is new Force_Vector_Array
---       (NodesPerElement_Index_Type);
+--       (NodesPerElement_Range);
 --     type NodesPerElement_Force_Vector_Array_Array
---       is array (Element_Index_Type) of NodesPerElement_Force_Vector_Array;
+--       is array (Element_Index) of NodesPerElement_Force_Vector_Array;
 --     type NodesPerFace_Coordinate_Array is new Coordinate_Array
---       (NodesPerFace_Index_Type);
+--       (NodesPerFace_Range);
 --
 --     type Force_Vector_Array_Access is access Force_Vector_Array;
 --     type NodesPerElement_Force_Vector_Array_Array_Access is access
@@ -346,16 +349,16 @@ package LULESH is
 --
 --     package Element_Index_Vectors is
 --       new Ada.Containers.Vectors
---         (Index_Type   => Element_Index_Type,
---          Element_Type => Element_Index_Type);
+--         (Index_Type   => Element_Index,
+--          Element_Type => Element_Index);
 --
---     type Region_Element_Vector_Array is array (Region_Index_Type range <>)
+--     type Region_Element_Vector_Array is array (Region_Index range <>)
 --       of Element_Index_Vectors.Vector;
 --
---     type Element_To_Region_Array is array (Element_Index_Type range <>)
---       of Region_Index_Type;
+--     type Element_To_Region_Array is array (Element_Index range <>)
+--       of Region_Index;
 --
-   type Symmetry_Node_Array is array (Cartesian_Axes) of Node_Index_Type;
+   type Symmetry_Node_Array is array (Cartesian_Axes) of Node_Index;
 
    type Node_Record is record
       --x    std::vector<Real_t> m_x ;  /* coordinates */
@@ -381,15 +384,14 @@ package LULESH is
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
       mass                : Mass_Type;
    end record;
-   type Node_Array is array (Node_Index_Type range <>) of Node_Record;
+   type Node_Array is array (Node_Index range <>) of Node_Record;
    type Node_Array_Access is access Node_Array;
-
 
    type MP_Type is (M, P);
    type Connectivity_Array is
-     array (Natural_Axes, MP_Type) of Element_Index_Type;
+     array (Natural_Axes, MP_Type) of Element_Index;
 
-   type Boundary_Condition_Type is (Symm, Free, Comm);
+   type Boundary_Condition_Type is (Symm, Free, Common);
    type Boundary_Condition_Array is array
      (Natural_Axes, MP_Type, Boundary_Condition_Type) of Boolean
      with pack;
@@ -450,18 +452,18 @@ package LULESH is
       --x    // Element mass
       mass : Mass_Type;
       --x    Index_t *m_regNumList ;    // Region number per domain element
-      region_number : Region_Index_Type;
+      region_number : Region_Index;
    end record;
-   type Element_Array is array (Element_Index_Type range <>) of Element_Record;
+   type Element_Array is array (Element_Index range <>) of Element_Record;
    type Element_Array_Access is access Element_Array;
 
    type Region_Record is record
       --x    Index_t *m_regElemSize ;   // Size of region sets
-      size     : Element_Index_Type;
+      size     : Element_Index;
       --x    Index_t **m_regElemlist ;  // region indexset
       elements : Element_Index_Array_Access;
    end record;
-   type Region_Array is array (Region_Index_Type range <>) of Region_Record;
+   type Region_Array is array (Region_Index range <>) of Region_Record;
    type Region_Array_Access is access Region_Array;
 
    type Variables_Record is record
@@ -476,28 +478,35 @@ package LULESH is
       --x    Real_t  m_deltatimemultub ;
       --x    Real_t  m_dtmax ;             // maximum allowable time increment
       --x    Real_t  m_stoptime ;          // end time for simulation
-      dtcourant       : Duration_Type;
-      dthydro         : Duration_Type;
+      dtcourant       : Time_Span;
+      dthydro         : Time_Span;
       cycle           : Int_t;
-      dtfixed         : Duration_Type;
-      time            : Time_Type;
-      deltatime       : Duration_Type;
-      deltatimemultlb : Real_Type;
-      deltatimemultub : Real_Type;
-      dtmax           : Duration_Type;
-      stoptime        : Time_Type;
+      dtfixed         : Time_Span;
+      current_time    : Time;
+      deltatime       : Time_Span;
+      delta_time_multiplier_lower_bound : Real_Type;
+      delta_time_multiplier_upper_bound : Real_Type;
+      dtmax           : Time_Span;
+      stoptime        : Time;
 
       --x    Int_t   m_numRanks ;
-      numRanks : Int_t;
+      numRanks : Rank_Count_Range;
 
       --x    Index_t m_colLoc ;
       --x    Index_t m_rowLoc ;
       --x    Index_t m_planeLoc ;
       --x    Index_t m_tp ;
-      colLoc   : Element_Index_Type;
-      rowLoc   : Element_Index_Type;
-      planeLoc : Element_Index_Type;
-      tp       : Index_Type;
+      colLoc   : Domain_Index;
+      rowLoc   : Domain_Index;
+      planeLoc : Domain_Index;
+      tp       : Domain_Index;
+
+      ---    // These arrays are not used if we're not threaded
+      ---    // OMP hack
+      --    Index_t *m_nodeElemStart ;
+      --    Index_t *m_nodeElemCornerList ;
+      nodeElemStart      : Node_Element_Index_Array_Access;
+      nodeElemCornerList : Node_Element_Index_Array_Access;
    end record;
 
    type Parameters_Record is record
@@ -556,40 +565,19 @@ package LULESH is
 
       --x    Index_t m_maxPlaneSize ;
       --x    Index_t m_maxEdgeSize ;
-      maxPlaneSize : Element_Index_Type;
-      maxEdgeSize  : Element_Index_Type;
-
-      ---    // These arrays are not used if we're not threaded
-      ---    // OMP hack
-      --    Index_t *m_nodeElemStart ;
-      --    Index_t *m_nodeElemCornerList ;
+      maxPlaneSize : Element_Index;
+      maxEdgeSize  : Element_Index;
 
       ---    // Used in setup
       --x    Index_t m_rowMin, m_rowMax;
       --x    Index_t m_colMin, m_colMax;
       --x    Index_t m_planeMin, m_planeMax ;
-      rowMin   : Element_Index_Type;
-      rowMax   : Element_Index_Type;
-      colMin   : Element_Index_Type;
-      colMax   : Element_Index_Type;
-      planeMin : Element_Index_Type;
-      planeMax : Element_Index_Type;
-
-   end record;
-
-private
-
-   type Domain_Record is record
-      --x    Index_t m_numElem ;
-      --x    Index_t m_numNode ;
-      numNode    : Node_Index_Type;
-      numElem    : Element_Index_Type;
-      numReg     : Region_Index_Type;
-      nodes      : Node_Array_Access;
-      regions    : Region_Array_Access;
-      elements   : Element_Array_Access;
-      variables  : Variables_Record;
-      parameters : Parameters_Record;
+      rowMin   : Element_Index;
+      rowMax   : Element_Index;
+      colMin   : Element_Index;
+      colMax   : Element_Index;
+      planeMin : Element_Index;
+      planeMax : Element_Index;
    end record;
 
    --x typedef Real_t &(Domain::* Domain_member )(Index_t) ;
@@ -598,18 +586,33 @@ private
    type Accessor_access is access function (Index : in Index_Type) return Real_Type;
    type Domain_member is access all Real_Type;
 
+private
+
+   type Domain_Record is record
+      --x    Index_t m_numElem ;
+      --x    Index_t m_numNode ;
+      numNode    : Node_Index;
+      numElem    : Element_Index;
+      numReg     : Region_Index;
+      nodes      : Node_Array_Access;
+      regions    : Region_Array_Access;
+      elements   : Element_Array_Access;
+      variables  : Variables_Record;
+      parameters : Parameters_Record;
+   end record;
+
    --- /******************************************/
 
    --- /* Work Routines */
 
    --x static inline
    --x void TimeIncrement(Domain& domain)
-   procedure TimeIncrement (domain : not null access Domain_Record)
+   procedure TimeIncrement (domain : in out Domain_Record)
    with Inline;
 
    --x static inline
    --x void LagrangeLeapFrog(Domain& domain)
-   procedure LagrangeLeapFrog (domain : not null access Domain_Record)
+   procedure LagrangeLeapFrog (domain : in out Domain_Record)
    with Inline;
 
 end LULESH;
