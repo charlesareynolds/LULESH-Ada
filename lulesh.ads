@@ -2,12 +2,14 @@ with Ada.Calendar;
 with Ada.Containers.Vectors;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Numerics.Generic_Real_Arrays;
+with Ada.Real_Time;
 
 with Interfaces;
 
 package LULESH is
 
    package AC renames Ada.Calendar;
+   package ART renames Ada.Real_Time;
 
    Usage_Error  : Exception;
    Coding_Error : Exception;
@@ -258,19 +260,19 @@ package LULESH is
    --x    { return m_nodeElemStart[idx+1] - m_nodeElemStart[idx] ; }
    --x    Index_t *nodeElemCornerList(Index_t idx)
    --x    { return &m_nodeElemCornerList[m_nodeElemStart[idx]] ; }
---     function nodeElemCount
+--     function nodeElemCount 
 --       (this : in Domain_Record;
---        idx  : in Index_Type)
---        return Index_Type is
+--        idx  : in Index_Type) 
+--        return Index_Type is 
 --       (this.nodeElemStart(idx+1) - this.nodeElemStart(idx))
 --     with inline;
---     function nodeElemCornerList
+--     function nodeElemCornerList 
 --       (this : in Domain_Record;
---        idx  : in Index_Type)
---        return Corner_List is
+--        idx  : in Index_Type) 
+--        return Corner_List is 
 --       (this.nodeElemCornerList(this.nodeElemStart(idx)..this.nodeElemStart(idx+1)))
 --     with inline;
-
+   
    --    //
    --    // MPI-Related additional data
    --    //
@@ -289,54 +291,59 @@ package LULESH is
    --   private:
    --- International System of Units:
    type SI_Type is new Real_Type;
+   
+   type Cubic_Meters                 is new SI_Type; -- = m**3
+   type Square_Meters                is new SI_Type; -- = m**2
+   type Joules                       is new SI_Type; -- = N*m
+   type Kilograms                    is new SI_Type; -- "kg"
+   type Kilograms_Per_Cubic_Meter    is new SI_Type; -- kg/m**3
+   type Meters                       is new SI_Type; -- "m"
+   type Meters_Per_Second            is new SI_Type; -- = m/s
+   type Meters_Per_Second_Per_Second is new SI_Type; -- = m/s**2 
+   type Newtons                      is new SI_Type; -- "N" = kg*m/s**2
+   type Pascals                      is new SI_Type; -- "Pa" = N/m**2
+   
+   subtype Acceleration is Meters_Per_Second_Per_Second;
+   subtype Density      is Kilograms_Per_Cubic_Meter;  
+   subtype Energy       is Joules;  
+   subtype Force        is Newtons;   
+   subtype Length       is Meters;
+   subtype Mass    is Kilograms;
+   subtype Pressure     is Pascals;
+   subtype Velocity     is Meters_Per_Second;
+   subtype Time         is ART.Time;
+   subtype Time_Span    is ART.Time_Span;
+   subtype Volume       is Cubic_Meters;
+   
+   type Gradient_Type is new Real_Type;
 
-   type Acceleration_Type is new SI_Type;
-   type Energy_Type       is new SI_Type;
-   type Force_Type        is new SI_Type;
-   type Gradient_Type     is new SI_Type;
-   type Length_Type       is new SI_Type;
-   type Mass_Type         is new SI_Type;
-   type Pressure_Type     is new SI_Type;
-   --     type Sig_Type   is new SI_Type;
-   type Time         is new SI_Type;
-   type Time_Span    is new SI_Type;
-   type Velocity_Type     is new SI_Type;
-   type Volume_Type       is new SI_Type;
+   -- Provides matrix and vector math:
+   package Length_Matrices   is new Ada.Numerics.Generic_Real_Arrays (Length);
 
-   subtype Size_Type       is Element_Index;
-
-   function "+"  (Left : Time;      Right : Time_Span) return Time;
-   function "+"  (Left : Time_Span; Right : Time)      return Time;
-   function "-"  (Left : Time;      Right : Time_Span) return Time;
-   function "-"  (Left : Time;      Right : Time)      return Time_Span;
-
-   type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration_Type;
-   type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;
-   type Force_Vector         is array (Cartesian_Axes) of Force_Type;
-   type Gradient_Vector      is array (Natural_Axes)   of Gradient_Type;
-   package Length_Matrices   is new Ada.Numerics.Generic_Real_Arrays (Length_Type);
+   type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration;
    type Coordinate_Vector    is new Length_Matrices.Real_Vector (Cartesian_Axes);
---   type Coordinate_Vector    is array (Cartesian_Axes) of Length_Type;
-   --     type Sig_Vector    is array (Cartesian_Axes) of Sig_Type;
-   type Strain_Vector        is array (Cartesian_Axes) of Force_Type;
-   type Velocity_Vector      is array (Cartesian_Axes) of Velocity_Type;
+   type Force_Vector         is array (Cartesian_Axes) of Force;
+   type Gradient_Vector      is array (Natural_Axes)   of Gradient_Type;
+   type Strain_Vector        is array (Cartesian_Axes) of Length;
+   type Velocity_Vector      is array (Cartesian_Axes) of Velocity;
 
-   --     type Acceleration_Array is array (Node_Index range <>) of Acceleration_Vector;
---     type Force_Array        is array (Node_Index range <>) of Force_Type;
---     type Force_Vector_Array is array (Node_Index range <>) of Force_Vector;
+   subtype Size_Type         is Element_Index;
+   type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;
+   
+
+   type Force_Vector_Array is array (Node_Index range <>) of Force_Vector;
+   type Force_Vector_Array_Access is access Force_Vector_Array;
 --     type Gradient_Array     is array (Node_Index range <>) of Gradient_Vector;
    type Coordinate_Array   is array (Node_Index range <>) of Coordinate_Vector;
---     type Mass_Array         is array (Node_Index range <>) of Mass_Type;
---     type Sig_Array          is array (Node_Index range <>) of Sig_Vector;
---     type Strain_Array       is array (Node_Index range <>) of Strain_Vector;
---     type Velocity_Array     is array (Node_Index range <>) of Velocity_Vector;
 --
    type NodesPerElement_Coordinate_Array is new Coordinate_Array
      (NodesPerElement_Range);
+   type NodesPerFace_Coordinate_Array is new Coordinate_Array
+     (NodesPerFace_Range);
 --     type NodesPerElement_Force_Array is new Force_Array
 --       (NodesPerElement_Range);
---     type NodesPerElement_Force_Vector_Array is new Force_Vector_Array
---       (NodesPerElement_Range);
+   type NodesPerElement_Force_Vector_Array is new Force_Vector_Array
+     (NodesPerElement_Range);
 --     type NodesPerElement_Force_Vector_Array_Array
 --       is array (Element_Index) of NodesPerElement_Force_Vector_Array;
 --     type NodesPerFace_Coordinate_Array is new Coordinate_Array
@@ -345,7 +352,6 @@ package LULESH is
 --     type Force_Vector_Array_Access is access Force_Vector_Array;
 --     type NodesPerElement_Force_Vector_Array_Array_Access is access
 --       NodesPerElement_Force_Vector_Array_Array;
---     type Sig_Array_Access is access Sig_Array;
 --
 --     package Element_Index_Vectors is
 --       new Ada.Containers.Vectors
@@ -382,7 +388,7 @@ package LULESH is
       --x    std::vector<Real_t> m_fz ;
       force               : Force_Vector;
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
-      mass                : Mass_Type;
+      nmass                : Mass;
    end record;
    type Node_Array is array (Node_Index range <>) of Node_Record;
    type Node_Array_Access is access Node_Array;
@@ -399,7 +405,6 @@ package LULESH is
    type Element_Record is record
       --x    std::vector<Index_t>  m_nodelist ;     /* elemToNode connectivity */
       node_indexes : NodesPerElement_Index_Array;
-
       --x    std::vector<Index_t>  m_lxim ;  /* element connectivity across each face */
       --x    std::vector<Index_t>  m_lxip ;
       --x    std::vector<Index_t>  m_letam ;
@@ -410,7 +415,6 @@ package LULESH is
       ---    // elem face symm/free-surface flag
       --x    std::vector<Int_t>    m_elemBC ;  /* symmetry/free-surface flags for each elem face */
       elemBC : Boundary_Condition_Array;
-
       --x    std::vector<Real_t> m_dxx ;  /* principal strains -- temporary */
       --x    std::vector<Real_t> m_dyy ;
       --x    std::vector<Real_t> m_dzz ;
@@ -425,32 +429,33 @@ package LULESH is
       --x    std::vector<Real_t> m_delx_zeta ;
       position_gradient : Gradient_Vector;
       --x    std::vector<Real_t> m_e ;   /* energy */
-      energy : Energy_Type;
+      eenergy : Energy;
       --x    std::vector<Real_t> m_p ;   /* pressure */
       --x    std::vector<Real_t> m_q ;   /* q */
       --x    std::vector<Real_t> m_ql ;  /* linear term for q */
       --x    std::vector<Real_t> m_qq ;  /* quadratic term for q */
-      static_pressure            : Force_Type;
-      dynamic_pressure           : Force_Type;
-      dynamic_pressure_linear    : Force_Type;
-      dynamic_pressure_quadratic : Force_Type;
+      static_pressure            : Pressure;
+      dynamic_pressure           : Pressure;
+      dynamic_pressure_linear    : Pressure;
+      dynamic_pressure_quadratic : Pressure;
+      sig                        : Force_Vector;
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
       --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
       --x    std::vector<Real_t> m_delv ;  /* m_vnew - m_v */
       --x    std::vector<Real_t> m_vdov ;  /* volume derivative over volume */
-      relative_volume               : Volume_Type;
-      reference_volume              : Volume_Type;
-      new_relative_volume           : Volume_Type;
-      relative_volume_delta         : Volume_Type;
-      volume_derivative_over_volume : Volume_Type;
+      relative_volume               : Volume;
+      reference_volume              : Volume;
+      new_relative_volume           : Volume;
+      relative_volume_delta         : Volume;
+      volume_derivative_over_volume : Volume;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
-      characteristic_length : Length_Type;
+      characteristic_length : Length;
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
-      sound_speed : Velocity_Type;
+      sound_speed : Velocity;
       --x    std::vector<Real_t> m_elemMass ;  /* mass */
       --x    // Element mass
-      mass : Mass_Type;
+      emass : Mass;
       --x    Index_t *m_regNumList ;    // Region number per domain element
       region_number : Region_Index;
    end record;
@@ -478,16 +483,17 @@ package LULESH is
       --x    Real_t  m_deltatimemultub ;
       --x    Real_t  m_dtmax ;             // maximum allowable time increment
       --x    Real_t  m_stoptime ;          // end time for simulation
-      dtcourant       : Time_Span;
-      dthydro         : Time_Span;
-      cycle           : Int_t;
-      dtfixed         : Time_Span;
-      current_time    : Time;
-      deltatime       : Time_Span;
+      dtcourant                         : Time_Span;
+      dthydro                           : Time_Span;
+      cycle                             : Int_t;
+      dtfixed                           : Time_Span;
+      use_courant_condition             : Boolean;
+      current_time                      : Time;
+      deltatime                         : Time_Span;
       delta_time_multiplier_lower_bound : Real_Type;
       delta_time_multiplier_upper_bound : Real_Type;
-      dtmax           : Time_Span;
-      stoptime        : Time;
+      dtmax                             : Time_Span;
+      stoptime                          : Time;
 
       --x    Int_t   m_numRanks ;
       numRanks : Rank_Count_Range;
@@ -507,6 +513,22 @@ package LULESH is
       --    Index_t *m_nodeElemCornerList ;
       nodeElemStart      : Node_Element_Index_Array_Access;
       nodeElemCornerList : Node_Element_Index_Array_Access;
+
+      --x    Index_t m_maxPlaneSize ;
+      --x    Index_t m_maxEdgeSize ;
+      maxPlaneSize : Element_Index;
+      maxEdgeSize  : Element_Index;
+
+      ---    // Used in setup
+      --x    Index_t m_rowMin, m_rowMax;
+      --x    Index_t m_colMin, m_colMax;
+      --x    Index_t m_planeMin, m_planeMax ;
+      rowMin   : Element_Index;
+      rowMax   : Element_Index;
+      colMin   : Element_Index;
+      colMax   : Element_Index;
+      planeMin : Element_Index;
+      planeMax : Element_Index;
    end record;
 
    type Parameters_Record is record
@@ -519,11 +541,11 @@ package LULESH is
       ---    const Real_t  m_q_cut ;             // q tolerance
       ---    const Real_t  m_v_cut ;             // relative volume tolerance
       ---    const Real_t  m_u_cut ;             // velocity tolerance
-      energy_tolerance           : Energy_Type;
-      pressure_tolerance         : Force_Type;
-      dynamic_pressure_tolerance : Force_Type;
-      relative_volume_tolerance  : Volume_Type;
-      velocity_tolerance         : Velocity_Type;
+      energy_tolerance           : Energy;
+      pressure_tolerance         : Pressure;
+      dynamic_pressure_tolerance : Pressure;
+      relative_volume_tolerance  : Volume;
+      velocity_tolerance         : Velocity;
 
       ---    // Other constants (usually setable, but hardcoded in this proxy app)
 
@@ -543,7 +565,7 @@ package LULESH is
       ---    const Real_t  m_refdens ;           // reference density
       hgcoef             : Real_Type;
       four_thirds        : Real_Type;
-      qstop              : Real_Type;
+      qstop              : Pressure;
       monoq_max_slope    : Real_Type;
       monoq_limiter_mult : Real_Type;
       qlc_monoq          : Real_Type;
@@ -551,10 +573,10 @@ package LULESH is
       qqc                : Real_Type;
       eosvmax            : Real_Type;
       eosvmin            : Real_Type;
-      pressure_floor     : Pressure_Type;
-      energy_floor       : Energy_Type;
-      volume_delta_max   : Volume_Type;
-      reference_density  : Real_Type;
+      pressure_floor     : Pressure;
+      energy_floor       : Energy;
+      volume_delta_max   : Volume;
+      reference_density  : Density;
       --x    Int_t    m_cost; //imbalance cost
       imbalance_cost     : Cost_Type;
 
@@ -562,31 +584,27 @@ package LULESH is
       --x    Index_t m_sizeY ;
       --x    Index_t m_sizeZ ;
       size : Cartesian_Size_Array;
-
-      --x    Index_t m_maxPlaneSize ;
-      --x    Index_t m_maxEdgeSize ;
-      maxPlaneSize : Element_Index;
-      maxEdgeSize  : Element_Index;
-
-      ---    // Used in setup
-      --x    Index_t m_rowMin, m_rowMax;
-      --x    Index_t m_colMin, m_colMax;
-      --x    Index_t m_planeMin, m_planeMax ;
-      rowMin   : Element_Index;
-      rowMax   : Element_Index;
-      colMin   : Element_Index;
-      colMax   : Element_Index;
-      planeMin : Element_Index;
-      planeMax : Element_Index;
    end record;
 
-   --x typedef Real_t &(Domain::* Domain_member )(Index_t) ;
-   --- (Address of (pointer to) a Domain class function (accessor):
-   ---   that takes an Index_t and returns the Real_t Domain component value)
-   type Accessor_access is access function (Index : in Index_Type) return Real_Type;
-   type Domain_member is access all Real_Type;
+   -- typedef Real_t &(Domain::* Domain_member )(Index_t) ;
+   -- (Address of (pointer to) a Domain class function (accessor):
+   --   that takes an Index_t and returns the Real_t Domain component value)
+--     type Accessor_access is access function (Index : in Index_Type) return Real_Type;
+--     type Domain_member is access all Real_Type;
 
 private
+
+   function "*" (Left : Time_Span; Right : Real_Type) return Time_Span is
+     (ART.To_Time_Span (ART.To_Duration(Left) * Duration (Right)))
+   with Inline;
+   
+   function "*" (Left  : Real_Type; Right : Time_Span) return Time_Span is
+     (Right * Left)
+   with Inline;
+ 
+   function "/" (Left  : Time_Span; Right : Real_Type) return Time_Span is
+     (ART.To_Time_Span (ART.To_Duration(Left) / Duration (Right)))
+   with Inline;
 
    type Domain_Record is record
       --x    Index_t m_numElem ;

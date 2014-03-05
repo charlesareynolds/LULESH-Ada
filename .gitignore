@@ -1,3 +1,5 @@
-gnatinspect.db
+*.ali
+*.obj
+*.exe
 obj/*.*
 obj_c/*.*
