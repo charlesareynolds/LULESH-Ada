@@ -65,11 +65,11 @@ package body LULESH.Par is
    twelveth : constant := 1.0/12.0;
 
    function CalcElemVolume
-     (Nodes : in NodesPerElement_Coordinate_Array)
+     (nodes : in NodesPerElement_Coordinate_Array)
       return Volume_Type
    is
-      --- N is just for conciseness below:
-      N : constant NodesPerElement_Coordinate_Array := Nodes;
+      --- n is just for conciseness below:
+      n : constant NodesPerElement_Coordinate_Array := nodes;
       volume : Volume_Type := 0.0;
       --x  #define TRIPLE_PRODUCT(x1, y1, z1, x2, y2, z2, x3, y3, z3) \
       --x     ((x1)*((y2)*(z3) - (z2)*(y3)) + (x2)*((z1)*(y3) - (y1)*(z3)) + (x3)*((y1)*(z2) - (z1)*(y2)))
@@ -100,9 +100,9 @@ package body LULESH.Par is
 
       --x  #undef TRIPLE_PRODUCT
       volume :=
-        Triple_Product((N(3)-N(1)) + (N(7)-N(2)), (N(6)-N(3)), (N(2)-N(0))) +
-        Triple_Product((N(4)-N(3)) + (N(5)-N(7)), (N(6)-N(4)), (N(7)-N(0))) +
-        Triple_Product((N(1)-N(4)) + (N(2)-N(5)), (N(6)-N(1)), (N(5)-N(0)));
+        Triple_Product((n(3)-n(1)) + (n(7)-n(2)), (n(6)-n(3)), (n(2)-n(0))) +
+        Triple_Product((n(4)-n(3)) + (n(5)-n(7)), (n(6)-n(4)), (n(7)-n(0))) +
+        Triple_Product((n(1)-n(4)) + (n(2)-n(5)), (n(6)-n(1)), (n(5)-n(0)));
       --x    volume *= twelveth;
       --x    return volume ;
       --x  }

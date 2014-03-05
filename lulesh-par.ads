@@ -4,7 +4,7 @@ package LULESH.Par is
    --x                        const Real_t y[8],
    --x                        const Real_t z[8]);
    function CalcElemVolume
-     (Nodes : in NodesPerElement_Coordinate_Array)
+     (nodes : in NodesPerElement_Coordinate_Array)
       return Volume_Type
    with inline;
 
