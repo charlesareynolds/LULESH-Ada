@@ -303,29 +303,29 @@ package LULESH is
    type Newtons                      is new SI_Type; -- "N" = kg*m/s**2
    type Pascals                      is new SI_Type; -- "Pa" = N/m**2
    
-   subtype Acceleration_Type is Meters_Per_Second_Per_Second;
-   subtype Density_Type      is Kilograms_Per_Cubic_Meter;  
-   subtype Energy_Type       is Joules;  
-   subtype Force_Magnitude   is Newtons;   
-   subtype Length_Type       is Meters;
-   subtype Mass_Type         is Kilograms;
-   subtype Pressure_Type     is Pascals;  -- kg * m**-1 * s**-2
-   subtype Time              is ART.Time;
-   subtype Time_Span         is ART.Time_Span;
-   subtype Velocity_Type     is Meters_Per_Second;
-   subtype Volume_Type       is Cubic_Meters;
+   subtype Acceleration is Meters_Per_Second_Per_Second;
+   subtype Density      is Kilograms_Per_Cubic_Meter;  
+   subtype Energy       is Joules;  
+   subtype Force        is Newtons;   
+   subtype Length       is Meters;
+   subtype Mass    is Kilograms;
+   subtype Pressure     is Pascals;
+   subtype Velocity     is Meters_Per_Second;
+   subtype Time         is ART.Time;
+   subtype Time_Span    is ART.Time_Span;
+   subtype Volume       is Cubic_Meters;
    
    type Gradient_Type is new Real_Type;
 
    -- Provides matrix and vector math:
-   package Length_Matrices   is new Ada.Numerics.Generic_Real_Arrays (Length_Type);
+   package Length_Matrices   is new Ada.Numerics.Generic_Real_Arrays (Length);
 
-   type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration_Type;
+   type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration;
    type Coordinate_Vector    is new Length_Matrices.Real_Vector (Cartesian_Axes);
-   type Force_Vector         is array (Cartesian_Axes) of Force_Magnitude;
+   type Force_Vector         is array (Cartesian_Axes) of Force;
    type Gradient_Vector      is array (Natural_Axes)   of Gradient_Type;
-   type Strain_Vector        is array (Cartesian_Axes) of Length_Type;
-   type Velocity_Vector      is array (Cartesian_Axes) of Velocity_Type;
+   type Strain_Vector        is array (Cartesian_Axes) of Length;
+   type Velocity_Vector      is array (Cartesian_Axes) of Velocity;
 
    subtype Size_Type         is Element_Index;
    type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;
@@ -338,6 +338,8 @@ package LULESH is
 --
    type NodesPerElement_Coordinate_Array is new Coordinate_Array
      (NodesPerElement_Range);
+   type NodesPerFace_Coordinate_Array is new Coordinate_Array
+     (NodesPerFace_Range);
 --     type NodesPerElement_Force_Array is new Force_Array
 --       (NodesPerElement_Range);
    type NodesPerElement_Force_Vector_Array is new Force_Vector_Array
@@ -386,7 +388,7 @@ package LULESH is
       --x    std::vector<Real_t> m_fz ;
       force               : Force_Vector;
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
-      mass                : Mass_Type;
+      nmass                : Mass;
    end record;
    type Node_Array is array (Node_Index range <>) of Node_Record;
    type Node_Array_Access is access Node_Array;
@@ -427,33 +429,33 @@ package LULESH is
       --x    std::vector<Real_t> m_delx_zeta ;
       position_gradient : Gradient_Vector;
       --x    std::vector<Real_t> m_e ;   /* energy */
-      energy : Energy_Type;
+      eenergy : Energy;
       --x    std::vector<Real_t> m_p ;   /* pressure */
       --x    std::vector<Real_t> m_q ;   /* q */
       --x    std::vector<Real_t> m_ql ;  /* linear term for q */
       --x    std::vector<Real_t> m_qq ;  /* quadratic term for q */
-      static_pressure            : Pressure_Type;
-      dynamic_pressure           : Pressure_Type;
-      dynamic_pressure_linear    : Pressure_Type;
-      dynamic_pressure_quadratic : Pressure_Type;
+      static_pressure            : Pressure;
+      dynamic_pressure           : Pressure;
+      dynamic_pressure_linear    : Pressure;
+      dynamic_pressure_quadratic : Pressure;
       sig                        : Force_Vector;
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
       --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
       --x    std::vector<Real_t> m_delv ;  /* m_vnew - m_v */
       --x    std::vector<Real_t> m_vdov ;  /* volume derivative over volume */
-      relative_volume               : Volume_Type;
-      reference_volume              : Volume_Type;
-      new_relative_volume           : Volume_Type;
-      relative_volume_delta         : Volume_Type;
-      volume_derivative_over_volume : Volume_Type;
+      relative_volume               : Volume;
+      reference_volume              : Volume;
+      new_relative_volume           : Volume;
+      relative_volume_delta         : Volume;
+      volume_derivative_over_volume : Volume;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
-      characteristic_length : Length_Type;
+      characteristic_length : Length;
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
-      sound_speed : Velocity_Type;
+      sound_speed : Velocity;
       --x    std::vector<Real_t> m_elemMass ;  /* mass */
       --x    // Element mass
-      mass : Mass_Type;
+      emass : Mass;
       --x    Index_t *m_regNumList ;    // Region number per domain element
       region_number : Region_Index;
    end record;
@@ -485,6 +487,7 @@ package LULESH is
       dthydro                           : Time_Span;
       cycle                             : Int_t;
       dtfixed                           : Time_Span;
+      use_courant_condition             : Boolean;
       current_time                      : Time;
       deltatime                         : Time_Span;
       delta_time_multiplier_lower_bound : Real_Type;
@@ -510,6 +513,22 @@ package LULESH is
       --    Index_t *m_nodeElemCornerList ;
       nodeElemStart      : Node_Element_Index_Array_Access;
       nodeElemCornerList : Node_Element_Index_Array_Access;
+
+      --x    Index_t m_maxPlaneSize ;
+      --x    Index_t m_maxEdgeSize ;
+      maxPlaneSize : Element_Index;
+      maxEdgeSize  : Element_Index;
+
+      ---    // Used in setup
+      --x    Index_t m_rowMin, m_rowMax;
+      --x    Index_t m_colMin, m_colMax;
+      --x    Index_t m_planeMin, m_planeMax ;
+      rowMin   : Element_Index;
+      rowMax   : Element_Index;
+      colMin   : Element_Index;
+      colMax   : Element_Index;
+      planeMin : Element_Index;
+      planeMax : Element_Index;
    end record;
 
    type Parameters_Record is record
@@ -522,11 +541,11 @@ package LULESH is
       ---    const Real_t  m_q_cut ;             // q tolerance
       ---    const Real_t  m_v_cut ;             // relative volume tolerance
       ---    const Real_t  m_u_cut ;             // velocity tolerance
-      energy_tolerance           : Energy_Type;
-      pressure_tolerance         : Pressure_Type;
-      dynamic_pressure_tolerance : Pressure_Type;
-      relative_volume_tolerance  : Volume_Type;
-      velocity_tolerance         : Velocity_Type;
+      energy_tolerance           : Energy;
+      pressure_tolerance         : Pressure;
+      dynamic_pressure_tolerance : Pressure;
+      relative_volume_tolerance  : Volume;
+      velocity_tolerance         : Velocity;
 
       ---    // Other constants (usually setable, but hardcoded in this proxy app)
 
@@ -546,7 +565,7 @@ package LULESH is
       ---    const Real_t  m_refdens ;           // reference density
       hgcoef             : Real_Type;
       four_thirds        : Real_Type;
-      qstop              : Pressure_Type;
+      qstop              : Pressure;
       monoq_max_slope    : Real_Type;
       monoq_limiter_mult : Real_Type;
       qlc_monoq          : Real_Type;
@@ -554,10 +573,10 @@ package LULESH is
       qqc                : Real_Type;
       eosvmax            : Real_Type;
       eosvmin            : Real_Type;
-      pressure_floor     : Pressure_Type;
-      energy_floor       : Energy_Type;
-      volume_delta_max   : Volume_Type;
-      reference_density  : Density_Type;
+      pressure_floor     : Pressure;
+      energy_floor       : Energy;
+      volume_delta_max   : Volume;
+      reference_density  : Density;
       --x    Int_t    m_cost; //imbalance cost
       imbalance_cost     : Cost_Type;
 
@@ -565,22 +584,6 @@ package LULESH is
       --x    Index_t m_sizeY ;
       --x    Index_t m_sizeZ ;
       size : Cartesian_Size_Array;
-
-      --x    Index_t m_maxPlaneSize ;
-      --x    Index_t m_maxEdgeSize ;
-      maxPlaneSize : Element_Index;
-      maxEdgeSize  : Element_Index;
-
-      ---    // Used in setup
-      --x    Index_t m_rowMin, m_rowMax;
-      --x    Index_t m_colMin, m_colMax;
-      --x    Index_t m_planeMin, m_planeMax ;
-      rowMin   : Element_Index;
-      rowMax   : Element_Index;
-      colMin   : Element_Index;
-      colMax   : Element_Index;
-      planeMin : Element_Index;
-      planeMax : Element_Index;
    end record;
 
    -- typedef Real_t &(Domain::* Domain_member )(Index_t) ;

@@ -24,6 +24,20 @@ procedure Lulesh.main is
    elapsed_time  : AC.Day_Duration;
    elapsed_timeG : AC.Day_Duration;
 
+   use type ART.Time;
+
+   function Image (this : in ART.Time) return String
+   is
+      SC : ART.Seconds_Count;
+      TS : ART.Time_Span;
+   begin
+      ART.Split (this, SC, TS);
+      return SC'Img & " " & ART.To_Duration (TS)'Img;
+   end Image;
+
+   function Image (this : in ART.Time_Span) return String is
+      (ART.To_Duration(this)'Img);
+
    -- #if USE_MPI
    --    Domain_member fieldData ;
 
@@ -170,8 +184,8 @@ begin
 
       if opts.showProg and not opts.quiet and myRank = 0 then
          ATI.Put_Line ("cycle = " & locDom.variables.cycle'Img
-                       & ", current_time = "& locDom.variables.current_time'Img
-                       & ", dt = " & locDom.variables.deltatime'Img);
+                       & ", current_time = "& Image(locDom.variables.current_time)
+                       & ", dt = " & Image(locDom.variables.deltatime));
       end if;
    end loop;
 

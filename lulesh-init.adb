@@ -282,7 +282,7 @@ package body LULESH.Init is
       --x       v(i) = Real_t(1.0) ;
       --x    }
       for index in 0..this.numElem-1 loop
-         this.elements(index).energy           := 0.0;
+         this.elements(index).eenergy           := 0.0;
          this.elements(index).static_pressure  := 0.0;
          this.elements(index).dynamic_pressure := 0.0;
          this.elements(index).sound_speed      := 0.0;
@@ -304,7 +304,7 @@ package body LULESH.Init is
       for index in 0..this.numNode-1 loop
          this.nodes(index).velocity     := (others => 0.0);
          this.nodes(index).acceleration := (others => 0.0);
-         this.nodes(index).mass := 0.0;
+         this.nodes(index).nmass := 0.0;
       end loop;
 
       --x    BuildMesh(nx, edgeNodes, edgeElems);
@@ -341,8 +341,10 @@ package body LULESH.Init is
 
       --x    dtfixed() = Real_t(-1.0e-6) ; // Negative means use courant condition
       --x    stoptime()  = Real_t(1.0e-2); // *Real_t(edgeElems*tp/45.0) ;
-      this.variables.dtfixed  := -1.0e-6;
-      this.variables.stoptime := -1.0e-2;
+      this.variables.dtfixed  := ART.Time_Span_Last;
+      this.variables.use_courant_condition  := True;
+      this.variables.stoptime := ART."+"
+        (ART.Time_First, ART.To_Time_Span(Duration(1.0e-2)));
 
       ---    // Initial conditions
       --x    deltatimemultlb() = Real_t(1.1) ;
@@ -354,10 +356,10 @@ package body LULESH.Init is
       --x    cycle()   = Int_t(0) ;
       this.variables.delta_time_multiplier_lower_bound := 1.1;
       this.variables.delta_time_multiplier_upper_bound := 1.2;
-      this.variables.dtcourant       := 1.0e+20;
-      this.variables.dthydro         := 1.0e+20;
-      this.variables.dtmax           := 1.0e-2;
-      this.variables.current_time    := Time_Span_Zero;
+      this.variables.dtcourant       := ART.Time_Span_Last;
+      this.variables.dthydro         := ART.Time_Span_Last;
+      this.variables.dtmax           := ART.To_Time_Span(Duration(1.0e-2));
+      this.variables.current_time    := ART.Time_First;
       this.variables.cycle           := 0;
 
       ---    // initialize field data
@@ -391,17 +393,17 @@ package body LULESH.Init is
                  this.nodes(elemToNode(node)).coordinate;
             end loop;
             declare
-               volume     : constant volume_type :=
+               element_volume : constant Volume :=
                  LULESH.Par.CalcElemVolume (local_coords);
-               mass_share : constant Mass_Type :=
-                 Mass_Type(volume) / Mass_Type(NODES_PER_ELEMENT);
+               mass_share     : constant Mass :=
+                 Mass(element_volume) / Mass(NODES_PER_ELEMENT);
             begin
-               this.elements(elem_index).reference_volume := volume;
-               this.elements(elem_index).mass := Mass_Type(volume);
+               this.elements(elem_index).reference_volume := element_volume;
+               this.elements(elem_index).emass := Mass(element_volume);
                for node in NodesPerElement_Range loop
                   declare
-                     node_mass : Mass_Type renames
-                       this.nodes(elemToNode(node)).mass;
+                     node_mass : Mass renames
+                       this.nodes(elemToNode(node)).nmass;
                   begin
                      node_mass := node_mass + mass_share;
                   end;
@@ -423,21 +425,22 @@ package body LULESH.Init is
       --x       e(0) = einit;
       --x    }
       declare
-         ebase : constant Energy_Type := 3.948746e+7;
+         ebase : constant Energy := 3.948746e+7;
          scale : constant Real_Type   :=
            Real_Type(side_length)*Real_Type(this.variables.tp)/45.0;
-         einit : constant Energy_Type := ebase*Energy_Type(scale**3);
+         einit : constant Energy := ebase*Energy(scale**3);
       begin
          if (this.variables.rowLoc
              + this.variables.colLoc
              + this.variables.planeLoc = 0) then
-            this.elements(0).energy := einit;
+            this.elements(0).eenergy := einit;
          end if;
          ---    //set initial deltatime base on analytic CFL calculation
          --x    deltatime() = (Real_t(.5)*cbrt(volo(0)))/sqrt(Real_t(2.0)*einit);
-         this.variables.deltatime := Time_Span
-           ((0.5*cbrt(real10(this.elements(0).reference_volume)))/
-              sqrt(2.0*real10(einit)));
+         this.variables.deltatime := ART.To_Time_Span
+           (Duration
+              ((0.5*cbrt(real10(this.elements(0).reference_volume)))/
+                   sqrt(2.0*real10(einit))));
       end;
       --x } // End constructor
       return this;
@@ -466,9 +469,9 @@ package body LULESH.Init is
       function Calc_T_Part
         (loc        : in Domain_Index;
          node : in Node_Index)
-         return Length_Type is
+         return Length is
         (1.125 *
-           Length_Type
+           Length
              ((Element_Index(loc)*side_length)+
                   Element_Index(node)/meshEdgeElems))
         with Inline;
@@ -563,32 +566,30 @@ package body LULESH.Init is
    -- #else
    --x    Index_t numthreads = 1;
    -- #endif
-      numthreads    : Index_Type := 1;
-      nodeElemCount : Node_Element_Index_Array_Access;
+      numthreads     : Index_Type := 1;
+      nodeElemCounts : Node_Element_Index_Array_Access;
    begin
       --x   if (numthreads > 1) {
-      --x     // set up node-centered indexing of elements
+      ---     // set up node-centered indexing of elements
       --x     Index_t *nodeElemCount = new Index_t[numNode()] ;
+      --x     for (Index_t i=0; i<numNode(); ++i) {
+      --x       nodeElemCount[i] = 0 ;
+      --x     }
       if numthreads > 1 then
-         --- // set up node-centered indexing of elements
-         nodeElemCount := new Node_Element_Index_Array (0..this.numNode-1);
-         --x     for (Index_t i=0; i<numNode(); ++i) {
-         --x       nodeElemCount[i] = 0 ;
-         --x     }
-         for i in nodeElemCount'Range loop
-            nodeElemCount(i) := 0 ;
-         end loop;
+         nodeElemCounts := new Node_Element_Index_Array (0..this.numNode-1);
+         nodeElemCounts.all := (others =>0);
          --x     for (Index_t i=0; i<numElem(); ++i) {
          --x       Index_t *nl = nodelist(i) ;
          --x       for (Index_t j=0; j < 8; ++j) {
          --x 	++(nodeElemCount[nl[j]] );
          --x       }
          --x     }
-         for i in 0..this.numElem-1 loop
-            for j in NodesPerElement_Range loop
+         --- Interior nodes have 8 elements, faces 4, edges 2, and corners 1:
+         for element in this.elements'Range loop
+            for enode in NodesPerElement_Range loop
                declare
                   count : Element_Index renames
-                    nodeElemCount(this.elements(i).node_indexes(j));
+                    nodeElemCounts(this.elements(element).node_indexes(enode));
                begin
                   count := count + 1;
                end;
@@ -601,11 +602,12 @@ package body LULESH.Init is
          --x 	m_nodeElemStart[i-1] + nodeElemCount[i-1] ;
          --x     }
          this.variables.nodeElemStart :=
-           new Node_Element_Index_Array (0..this.numNode+1);
+           new Node_Element_Index_Array (0..this.numNode);
          this.variables.nodeElemStart (0) := 0;
-         for i in 1..this.numNode-1 loop
-            this.variables.nodeElemStart (i) :=
-              this.variables.nodeElemStart (i-1) + nodeElemCount(i-1);
+         for node in 1..this.numNode loop
+            this.variables.nodeElemStart (node) :=
+              --- + 1, 2, 4, or 8:
+              this.variables.nodeElemStart (node-1) + nodeElemCounts(node-1);
          end loop;
 
          --x     m_nodeElemCornerList = new Index_t[m_nodeElemStart[numNode()]];
@@ -616,10 +618,7 @@ package body LULESH.Init is
          --x       nodeElemCount[i] = 0;
          --x     }
          ---!! Again?
-         for i in nodeElemCount'Range loop
-            nodeElemCount(i) := 0 ;
-         end loop;
-
+         nodeElemCounts.all := (others =>0);
          --x     for (Index_t i=0; i < numElem(); ++i) {
          --x       Index_t *nl = nodelist(i) ;
          --x       for (Index_t j=0; j < 8; ++j) {
@@ -630,18 +629,18 @@ package body LULESH.Init is
          --x 	++(nodeElemCount[m]) ;
          --x       }
          --x     }
-         for i in 0..this.numElem-1 loop
-            for j in NodesPerElement_Range loop
+         for element in 0..this.numElem-1 loop
+            for enode in NodesPerElement_Range loop
                declare
-                  m      : constant Node_Index :=
-                    this.elements(i).node_indexes(j);
+                  mnode  : constant Node_Index :=
+                    this.elements(element).node_indexes(enode);
                   k      : constant Node_Index :=
-                    i*NODES_PER_ELEMENT + j ;
+                    Node_Index(element)*NODES_PER_ELEMENT + enode ;
                   offset : constant Node_Index :=
-                    this.variables.nodeElemStart(m) + nodeElemCount(m) ;
+                    this.variables.nodeElemStart(mnode) + nodeElemCounts(mnode) ;
                begin
                   this.variables.nodeElemCornerList(offset) := k;
-                  nodeElemCount(m) := nodeElemCount(m) + 1;
+                  nodeElemCounts(mnode) := nodeElemCounts(mnode) + 1;
                end;
             end loop;
          end loop;
@@ -668,7 +667,7 @@ package body LULESH.Init is
                   clv : constant Node_Index :=
                     this.variables.nodeElemCornerList(i);
                begin
-                  if clv < 0 or clv > this.numElem*NODES_PER_ELEMENT then
+                  if not clv in 0 .. this.numElem*NODES_PER_ELEMENT then
                      raise Coding_Error with
                        "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"&
                        "  i:" & i'Img & " clv:" & clv'Img;
@@ -677,7 +676,7 @@ package body LULESH.Init is
             end loop;
          end;
          --x     delete [] nodeElemCount ;
-         Free (nodeElemCount);
+         Free (nodeElemCounts);
          --x   }
          --x   else {
       else
@@ -1103,7 +1102,7 @@ package body LULESH.Init is
       --x     pidx += sizeX()*sizeY() ;
       --x   }
       pidx := this.numElem;
-      if this.parameters.planeMin /= 0 then
+      if this.variables.planeMin /= 0 then
          ghostIdx(0) := pidx;
          pidx := pidx + size(X)*size(Y);
       end if;
@@ -1111,7 +1110,7 @@ package body LULESH.Init is
       --x     ghostIdx[1] = pidx ;
       --x     pidx += sizeX()*sizeY() ;
       --x   }
-      if this.parameters.planeMax /= 0 then
+      if this.variables.planeMax /= 0 then
          ghostIdx(1) := pidx;
          pidx := pidx + size(X)*size(Y);
       end if;
@@ -1119,7 +1118,7 @@ package body LULESH.Init is
       --x     ghostIdx[2] = pidx ;
       --x     pidx += sizeX()*sizeZ() ;
       --x   }
-      if this.parameters.rowMin /= 0 then
+      if this.variables.rowMin /= 0 then
          ghostIdx(2) := pidx;
          pidx := pidx + size(Z)*size(X);
       end if;
@@ -1127,7 +1126,7 @@ package body LULESH.Init is
       --x     ghostIdx[3] = pidx ;
       --x     pidx += sizeX()*sizeZ() ;
       --x   }
-      if this.parameters.rowMax /= 0 then
+      if this.variables.rowMax /= 0 then
          ghostIdx(3) := pidx;
          pidx := pidx + size(Z)*size(X);
       end if;
@@ -1135,14 +1134,14 @@ package body LULESH.Init is
       --x     ghostIdx[4] = pidx ;
       --x     pidx += sizeY()*sizeZ() ;
       --x   }
-      if this.parameters.colMin /= 0 then
+      if this.variables.colMin /= 0 then
          ghostIdx(4) := pidx;
          pidx := pidx + size(Y)*size(Z);
       end if;
       --x   if (m_colMax != 0) {
       --x     ghostIdx[5] = pidx ;
       --x   }
-      if this.parameters.rowMax /= 0 then
+      if this.variables.colMax /= 0 then
          ghostIdx(5) := pidx;
       end if;
 
@@ -1155,8 +1154,8 @@ package body LULESH.Init is
          declare
             planeInc : constant Element_Index := i*edgeElems*edgeElems ;
             rowInc   : constant Element_Index := i*edgeElems ;
-            function At_Beginning (this : in Domain_Index) return Boolean is
-               (this = 0);
+            function At_Beginning (domain : in Domain_Index) return Boolean is
+               (domain = 0);
             function At_End (domain : in Domain_Index) return Boolean is
                (domain = this.variables.tp-1);
          begin
