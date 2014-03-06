@@ -566,16 +566,17 @@ package body LULESH.Init is
    -- #else
    --x    Index_t numthreads = 1;
    -- #endif
-      numthreads     : Index_Type := 1;
-      nodeElemCounts : Node_Element_Index_Array_Access;
-   begin
-      --x   if (numthreads > 1) {
-      ---     // set up node-centered indexing of elements
-      --x     Index_t *nodeElemCount = new Index_t[numNode()] ;
-      --x     for (Index_t i=0; i<numNode(); ++i) {
-      --x       nodeElemCount[i] = 0 ;
-      --x     }
-      if numthreads > 1 then
+      numthreads         : Index_Type := 1;
+      --- Number of elements each node is in. Interior nodes are in 8 elements,
+      --- faces 4, edges 2, and corners 1:
+      nodeElemCounts     : Node_Element_Index_Array_Access;
+      nodeElemStart      : Node_Element_Index_Array_Access renames
+        this.variables.nodeElemStart;
+      nodeElemCornerList : Node_Element_Index_Array_Access renames
+        this.variables.nodeElemCornerList;
+
+      procedure Count_Elements_For_Each_Node is
+      begin
          nodeElemCounts := new Node_Element_Index_Array (0..this.numNode-1);
          nodeElemCounts.all := (others =>0);
          --x     for (Index_t i=0; i<numElem(); ++i) {
@@ -584,36 +585,39 @@ package body LULESH.Init is
          --x 	++(nodeElemCount[nl[j]] );
          --x       }
          --x     }
-         --- Interior nodes have 8 elements, faces 4, edges 2, and corners 1:
          for element in this.elements'Range loop
             for enode in NodesPerElement_Range loop
                declare
-                  count : Element_Index renames
+                  necount : Element_Index renames
                     nodeElemCounts(this.elements(element).node_indexes(enode));
                begin
-                  count := count + 1;
+                  necount := necount + 1;
                end;
             end loop;
          end loop;
+      end Count_Elements_For_Each_Node;
+
+      procedure Calc_First_Element_For_Each_Node is
+      begin
          --x     m_nodeElemStart = new Index_t[numNode()+1] ;
          --x     m_nodeElemStart[0] = 0;
          --x     for (Index_t i=1; i <= numNode(); ++i) {
          --x       m_nodeElemStart[i] =
          --x 	m_nodeElemStart[i-1] + nodeElemCount[i-1] ;
          --x     }
-         this.variables.nodeElemStart :=
-           new Node_Element_Index_Array (0..this.numNode);
-         this.variables.nodeElemStart (0) := 0;
+         nodeElemStart := new Node_Element_Index_Array (0..this.numNode);
+         nodeElemStart (0) := 0;
          for node in 1..this.numNode loop
-            this.variables.nodeElemStart (node) :=
-              --- + 1, 2, 4, or 8:
-              this.variables.nodeElemStart (node-1) + nodeElemCounts(node-1);
+            nodeElemStart (node) :=
+              nodeElemStart (node-1) + nodeElemCounts (node-1);
          end loop;
+      end Calc_First_Element_For_Each_Node;
 
+      procedure Calc_Nodes_Per_Element_Offset_For_Each_Corner is
+      begin
          --x     m_nodeElemCornerList = new Index_t[m_nodeElemStart[numNode()]];
-         this.variables.nodeElemCornerList :=
-           new Node_Element_Index_Array (0..this.variables.nodeElemStart(
-                                         this.numNode)-1);
+         nodeElemCornerList := new Node_Element_Index_Array
+           (0..Node_Index(nodeElemStart(this.numNode))-1);
          --x     for (Index_t i=0; i < numNode(); ++i) {
          --x       nodeElemCount[i] = 0;
          --x     }
@@ -632,19 +636,23 @@ package body LULESH.Init is
          for element in 0..this.numElem-1 loop
             for enode in NodesPerElement_Range loop
                declare
-                  mnode  : constant Node_Index :=
+                  node   : constant Node_Index :=
                     this.elements(element).node_indexes(enode);
-                  k      : constant Node_Index :=
-                    Node_Index(element)*NODES_PER_ELEMENT + enode ;
-                  offset : constant Node_Index :=
-                    this.variables.nodeElemStart(mnode) + nodeElemCounts(mnode) ;
+                  corner_offset : constant Node_Index :=
+                    nodeElemStart(node) + nodeElemCounts(node) ;
+                  Nodes_Per_Element_Offset      : constant Node_Index :=
+                    Node_Index(element * NODES_PER_ELEMENT) + enode ;
                begin
-                  this.variables.nodeElemCornerList(offset) := k;
-                  nodeElemCounts(mnode) := nodeElemCounts(mnode) + 1;
+                  nodeElemCornerList(corner_offset) := Nodes_Per_Element_Offset;
+                  ---!! Is it ok that this changes from one reference to ther next?
+                  nodeElemCounts(node) := nodeElemCounts(node) + 1;
                end;
             end loop;
          end loop;
+      end Calc_Nodes_Per_Element_Offset_For_Each_Corner;
 
+      procedure Check_Each_Nodes_Per_Element_Offset is
+      begin
          --x     Index_t clSize = m_nodeElemStart[numNode()] ;
          --x     for (Index_t i=0; i < clSize; ++i) {
          --x       Index_t clv = m_nodeElemCornerList[i] ;
@@ -659,15 +667,17 @@ package body LULESH.Init is
          --x       }
          --x     }
          declare
-            clSize : constant Node_Index :=
-              this.variables.nodeElemStart(this.numNode);
+            clSize     : constant Node_Index :=
+              nodeElemStart(this.numNode);
+            max_clSize : constant Node_Index :=
+              Node_Index (this.numElem) * NODES_PER_ELEMENT;
          begin
             for i in 0..clSize-1 loop
                declare
                   clv : constant Node_Index :=
-                    this.variables.nodeElemCornerList(i);
+                    nodeElemCornerList(i);
                begin
-                  if not clv in 0 .. this.numElem*NODES_PER_ELEMENT then
+                  if not (clv in 0 .. max_clSize) then
                      raise Coding_Error with
                        "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"&
                        "  i:" & i'Img & " clv:" & clv'Img;
@@ -675,6 +685,20 @@ package body LULESH.Init is
                end;
             end loop;
          end;
+      end Check_Each_Nodes_Per_Element_Offset;
+
+   begin
+      --x   if (numthreads > 1) {
+      ---     // set up node-centered indexing of elements
+      --x     Index_t *nodeElemCount = new Index_t[numNode()] ;
+      --x     for (Index_t i=0; i<numNode(); ++i) {
+      --x       nodeElemCount[i] = 0 ;
+      --x     }
+      if numthreads > 1 then
+         Count_Elements_For_Each_Node;
+         Calc_First_Element_For_Each_Node;
+         Calc_Nodes_Per_Element_Offset_For_Each_Corner;
+         Check_Each_Nodes_Per_Element_Offset;
          --x     delete [] nodeElemCount ;
          Free (nodeElemCounts);
          --x   }
@@ -683,8 +707,8 @@ package body LULESH.Init is
          ---     // These arrays are not used if we're not threaded
          --x     m_nodeElemStart = NULL;
          --x     m_nodeElemCornerList = NULL;
-         this.variables.nodeElemStart      := null;
-         this.variables.nodeElemCornerList := null;
+         nodeElemStart      := null;
+         nodeElemCornerList := null;
          --x   }
       end if;
       --x }
