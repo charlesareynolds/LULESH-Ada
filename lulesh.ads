@@ -77,8 +77,8 @@ package LULESH is
    subtype Process_Count_Range is Rank_Count_Range;
 
    --- Looking down on element:
-   --- 1-2-3-4 are nodes going CCW on bottom.
-   --- 5-6-7-8 are nodes directly above each.
+   --- 1-2-3-4 (0-1-2-3) are nodes going CCW on bottom.
+   --- 5-6-7-8 (4-5-6-7) are nodes directly above each.
    NODES_PER_ELEMENT : constant := 8;
    NODES_PER_FACE    : constant := 4;
    type Node_Index               is new Index_Type;
@@ -120,9 +120,12 @@ package LULESH is
    --- Xi   is positive in direction +Y: from face 1584 to 2673.
    --- Eta  is positive in direction -X: from face 1562 to 4873.
    --- Zeta is positive in direction +Z: from face 1234 to 5678.
-   type Natural_Axes is (Xi, Eta, Zeta);
-   Et : constant Natural_Axes := Eta;
-   Ze : constant Natural_Axes := Zeta;
+   subtype Natural_Axes is integer range 0..2;
+   Xi   : constant Natural_Axes := 0;
+   Eta  : constant Natural_Axes := 1;
+   Zeta : constant Natural_Axes := 2;
+   --     type Natural_Axes is (Xi, Eta, Zeta);
+
    subtype Natural_Magnitude_Range is Real_Type range -1.0 .. 1.0;
 
    type FacesPerNode_Element_Index_Array is
@@ -133,6 +136,9 @@ package LULESH is
      (Element_Index range <>) of NodesPerElement_Index_Array;
    type Face_NodesPerFace_NodesPerElement_Array is array
      (Face_Range, NodesPerFace_Range) of NodesPerElement_Range;
+   
+   type Cartesian_Natural_Real_Array is 
+     array (Cartesian_Axes, Natural_Axes) Of Real_Type;
 
    type Domain_Record is private;
    type Domain_Access is access Domain_Record;
@@ -308,7 +314,7 @@ package LULESH is
    subtype Energy       is Joules;  
    subtype Force        is Newtons;   
    subtype Length       is Meters;
-   subtype Mass    is Kilograms;
+   subtype Mass         is Kilograms;
    subtype Pressure     is Pascals;
    subtype Velocity     is Meters_Per_Second;
    subtype Time         is ART.Time;
@@ -321,9 +327,10 @@ package LULESH is
    package Length_Matrices   is new Ada.Numerics.Generic_Real_Arrays (Length);
 
    type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration;
-   type Coordinate_Vector    is new Length_Matrices.Real_Vector (Cartesian_Axes);
+   type C_Coordinate_Vector  is new Length_Matrices.Real_Vector (Cartesian_Axes);
    type Force_Vector         is array (Cartesian_Axes) of Force;
    type Gradient_Vector      is array (Natural_Axes)   of Gradient_Type;
+   type N_Coordinate_Vector  is new Length_Matrices.Real_Vector (Natural_Axes);
    type Strain_Vector        is array (Cartesian_Axes) of Length;
    type Velocity_Vector      is array (Cartesian_Axes) of Velocity;
 
@@ -331,46 +338,29 @@ package LULESH is
    type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;
    
 
-   type Force_Vector_Array is array (Node_Index range <>) of Force_Vector;
+   type Force_Vector_Array        is array (Node_Index range <>) of Force_Vector;
    type Force_Vector_Array_Access is access Force_Vector_Array;
 --     type Gradient_Array     is array (Node_Index range <>) of Gradient_Vector;
-   type Coordinate_Array   is array (Node_Index range <>) of Coordinate_Vector;
---
-   type NodesPerElement_Coordinate_Array is new Coordinate_Array
+   type C_Coordinate_Array        is array (Node_Index range <>) of C_Coordinate_Vector;
+
+   type NodesPerElement_C_Coordinate_Array is new C_Coordinate_Array
      (NodesPerElement_Range);
-   type NodesPerFace_Coordinate_Array is new Coordinate_Array
+   type NodesPerFace_C_Coordinate_Array    is new C_Coordinate_Array
      (NodesPerFace_Range);
---     type NodesPerElement_Force_Array is new Force_Array
---       (NodesPerElement_Range);
+
    type NodesPerElement_Force_Vector_Array is new Force_Vector_Array
      (NodesPerElement_Range);
---     type NodesPerElement_Force_Vector_Array_Array
---       is array (Element_Index) of NodesPerElement_Force_Vector_Array;
---     type NodesPerFace_Coordinate_Array is new Coordinate_Array
---       (NodesPerFace_Range);
---
---     type Force_Vector_Array_Access is access Force_Vector_Array;
---     type NodesPerElement_Force_Vector_Array_Array_Access is access
---       NodesPerElement_Force_Vector_Array_Array;
---
---     package Element_Index_Vectors is
---       new Ada.Containers.Vectors
---         (Index_Type   => Element_Index,
---          Element_Type => Element_Index);
---
---     type Region_Element_Vector_Array is array (Region_Index range <>)
---       of Element_Index_Vectors.Vector;
---
---     type Element_To_Region_Array is array (Element_Index range <>)
---       of Region_Index;
---
+
+   type Cartesian_Natural_Length_Array is 
+     array (Cartesian_Axes, Natural_Axes) Of Length;
+
    type Symmetry_Node_Array is array (Cartesian_Axes) of Node_Index;
 
    type Node_Record is record
       --x    std::vector<Real_t> m_x ;  /* coordinates */
       --x    std::vector<Real_t> m_y ;
       --x    std::vector<Real_t> m_z ;
-      coordinate          : Coordinate_Vector;
+      coordinate           : C_Coordinate_Vector;
       --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
       --x    std::vector<Index_t> m_symmY ;
       --x    std::vector<Index_t> m_symmZ ;
@@ -378,15 +368,15 @@ package LULESH is
       --x    std::vector<Real_t> m_xd ; /* velocities */
       --x    std::vector<Real_t> m_yd ;
       --x    std::vector<Real_t> m_zd ;
-      velocity            : Velocity_Vector;
+      velocity             : Velocity_Vector;
       --x    std::vector<Real_t> m_xdd ; /* accelerations */
       --x    std::vector<Real_t> m_ydd ;
       --x    std::vector<Real_t> m_zdd ;
-      acceleration        : Acceleration_Vector;
+      acceleration         : Acceleration_Vector;
       --x    std::vector<Real_t> m_fx ;  /* forces */
       --x    std::vector<Real_t> m_fy ;
       --x    std::vector<Real_t> m_fz ;
-      force               : Force_Vector;
+      force                : Force_Vector;
       --x    std::vector<Real_t> m_nodalMass ;  /* mass */
       nmass                : Mass;
    end record;
@@ -397,7 +387,7 @@ package LULESH is
    type Connectivity_Array is
      array (Natural_Axes, MP_Type) of Element_Index;
 
-   type Boundary_Condition_Type is (Symm, Free, Common);
+   type Boundary_Condition_Type  is (Symm, Free, Common);
    type Boundary_Condition_Array is array
      (Natural_Axes, MP_Type, Boundary_Condition_Type) of Boolean
      with pack;

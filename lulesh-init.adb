@@ -384,7 +384,7 @@ package body LULESH.Init is
       --x    }
       for elem_index in 0..this.numElem-1 loop
          declare
-            local_coords : NodesPerElement_Coordinate_Array;
+            local_coords : NodesPerElement_C_Coordinate_Array;
             elemToNode   : constant NodesPerElement_Index_Array :=
               this.elements(elem_index).node_indexes;
          begin
@@ -464,7 +464,7 @@ package body LULESH.Init is
       meshEdgeElems : constant Element_Index :=
         Element_Index(this.variables.tp)*side_length ;
       node    : Node_Index;
-      t             : Coordinate_Vector;
+      t             : C_Coordinate_Vector;
       zidx          : Element_Index;
       function Calc_T_Part
         (loc        : in Domain_Index;
