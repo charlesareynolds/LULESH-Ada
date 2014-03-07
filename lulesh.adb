@@ -364,9 +364,9 @@ package body LULESH is
    --                                        Real_t b[][8],
    --                                        Real_t* const volume )
    procedure CalcElemShapeFunctionDerivatives
-     (enodes     : in  NodesPerElement_C_Coordinate_Array;
-      b          : out NodesPerElement_XEZ_Real_Array;
-      the_volume : out Volume)
+     (enodes  : in  NodesPerElement_C_Coordinate_Array;
+      b       : out Derivitave_Array;
+      evolume : out Volume)
      with Inline
    is
       --x {
@@ -405,7 +405,6 @@ package body LULESH is
       --x   fjzxi = Real_t(.125) * ( (z6-z0) + (z5-z3) - (z7-z1) - (z4-z2) );
       --x   fjzet = Real_t(.125) * ( (z6-z0) - (z5-z3) + (z7-z1) - (z4-z2) );
       --x   fjzze = Real_t(.125) * ( (z6-z0) + (z5-z3) + (z7-z1) + (z4-z2) );
-
       procedure Calculate_Naturals_For_C_Axis
         (axis : in Cartesian_Axes)
         with Inline
@@ -506,35 +505,23 @@ package body LULESH is
       --x   b[2][6] = -b[2][0];
       --x   b[2][7] = -b[2][1];
       procedure Calculate_Partial
-        (axis : in Cartesian_Axes)
+        (caxis : in Cartesian_Axes)
         with Inline is
       begin
-         b(axis, 0) :=
-           -  cj(axis, Xi)
-           -  cj(axis, Eta)
-           -  cj(axis, Zeta);
-         b(axis, 1) :=
-           +  cj(axis, Xi)
-           -  cj(axis, Eta)
-           -  cj(axis, Zeta);
-         b(axis, 2) :=
-           +  cj(axis, Xi)
-           +  cj(axis, Eta)
-           -  cj(axis, Zeta);
-         b(axis, 3) :=
-           -  cj(axis, Xi)
-           +  cj(axis, Eta)
-           -  cj(axis, Zeta);
-         b(axis, 4) := - b(axis, 2);
-         b(axis, 5) := - b(axis, 3);
-         b(axis, 6) := - b(axis, 0);
-         b(axis, 7) := - b(axis, 1);
+         b(0)(caxis) := -  cj(caxis, Xi) -  cj(caxis, Eta) - cj(caxis, Zeta);
+         b(1)(caxis) := +  cj(caxis, Xi) -  cj(caxis, Eta) - cj(caxis, Zeta);
+         b(2)(caxis) := +  cj(caxis, Xi) +  cj(caxis, Eta) - cj(caxis, Zeta);
+         b(3)(caxis) := -  cj(caxis, Xi) +  cj(caxis, Eta) - cj(caxis, Zeta);
+         b(4)(caxis) := - b(2)(caxis);
+         b(5)(caxis) := - b(3)(caxis);
+         b(6)(caxis) := - b(0)(caxis);
+         b(7)(caxis) := - b(1)(caxis);
       end Calculate_Partial;
 
       procedure Calculate_Partials is
       begin
-         for axis in Cartesian_Axes loop
-            Calculate_Partial (axis);
+         for caxis in Cartesian_Axes loop
+            Calculate_Partial (caxis);
          end loop;
       end Calculate_Partials;
 
@@ -542,7 +529,7 @@ package body LULESH is
       begin
          ---   /* calculate jacobian determinant (volume) */
          --x   *volume = Real_t(8.) * ( fjxet * cjxet + fjyet * cjyet + fjzet * cjzet);
-         the_volume := 8.0 * Volume (
+         evolume := 8.0 * Volume (
            (+ fj(X, Eta) * cj(X, Eta)
             + fj(Y, Eta) * cj(Y, Eta)
             + fj(Z, Eta) * cj(Z, Eta)));
@@ -577,7 +564,7 @@ package body LULESH is
       n1         : in out C_Coordinate_Vector;
       n2         : in out C_Coordinate_Vector;
       n3         : in out C_Coordinate_Vector;
-      Face_Nodes : in NodesPerFace_C_Coordinate_Array)
+      fnodes : in NodesPerFace_C_Coordinate_Array)
      with Inline
    is
       --x    Real_t bisectX0 = Real_t(0.5) * (x3 + x2 - x1 - x0);
@@ -593,16 +580,16 @@ package body LULESH is
       bisect : constant Bisect_XYZ_Real_Array :=
         (0 =>
            Length(0.5) * (
-             - Face_Nodes (0)
-             - Face_Nodes (1)
-             + Face_Nodes (2)
-             + Face_Nodes (3)),
+             - fnodes (0)
+             - fnodes (1)
+             + fnodes (2)
+             + fnodes (3)),
          1 =>
            Length(0.5) * (
-             - Face_Nodes (0)
-             + Face_Nodes (1)
-             + Face_Nodes (2)
-             - Face_Nodes (3)));
+             - fnodes (0)
+             + fnodes (1)
+             + fnodes (2)
+             - fnodes (3)));
 
       function Calc_Area
         (D1, D2 : in Cartesian_Axes) return Real_Type is
@@ -629,11 +616,11 @@ package body LULESH is
       --x    *normalZ1 += areaZ;
       --x    *normalZ2 += areaZ;
       --x    *normalZ3 += areaZ;
-      for axis in Cartesian_Axes loop
-         n0(axis) := n0(axis) + area (axis);
-         n1(axis) := n1(axis) + area (axis);
-         n2(axis) := n2(axis) + area (axis);
-         n3(axis) := n3(axis) + area (axis);
+      for caxis in Cartesian_Axes loop
+         n0(caxis) := n0(caxis) + area (caxis);
+         n1(caxis) := n1(caxis) + area (caxis);
+         n2(caxis) := n2(caxis) + area (caxis);
+         n3(caxis) := n3(caxis) + area (caxis);
       end loop;
 
       --x }
@@ -653,16 +640,7 @@ package body LULESH is
    procedure CalcElemNodeNormals
      (pf         : in out NodesPerElement_XYZ_Real_Array_Array;
       element_node_coords : in     NodesPerElement_C_Coordinate_Array)
-     with Inline
-   is
-      nodes_of_face : constant Face_NodesPerFace_NodesPerElement_Array :=
-        (0 => (0, 1, 2, 3),
-         1 => (0, 4, 5, 1),
-         2 => (1, 5, 6, 2),
-         3 => (2, 6, 7, 3),
-         4 => (3, 7, 4, 0),
-         5 => (4, 7, 6, 5));
-
+     with Inline is
    begin
       --x    for (Index_t i = 0 ; i < 8 ; ++i) {
       --x       pfx[i] = Real_t(0.0);

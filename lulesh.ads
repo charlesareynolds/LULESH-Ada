@@ -77,8 +77,8 @@ package LULESH is
    subtype Process_Count_Range is Rank_Count_Range;
 
    --- Looking down on element:
-   --- 1-2-3-4 (0-1-2-3) are nodes going CCW on bottom.
-   --- 5-6-7-8 (4-5-6-7) are nodes directly above each.
+   --- 0-1-2-3 are nodes on bottom, going CCW.
+   --- 4-5-6-7 are nodes directly above each.
    NODES_PER_ELEMENT : constant := 8;
    NODES_PER_FACE    : constant := 4;
    type Node_Index               is new Index_Type;
@@ -105,22 +105,27 @@ package LULESH is
    type Region_Bin_End_Array is array (Region_Index range <>)
      of Cost_Type;
    type Region_Bin_End_Array_Access is access Region_Bin_End_Array;
+   
+   --- Using this as a base type instead of having enum types so that 
+   --- Ada.Numerics.Generic_Real_Arrays can be used, which requres Integer
+   --- array indices:
+   subtype Axes_3D is integer range 0..2;
 
    --- Cartesian coordinates:
-   --- X is positive in direction node 4 -> node 1
-   --- Y is positive in direction node 4 -> node 3
-   --- X is positive in direction node 4 -> node 8
-   subtype Cartesian_Axes is integer range 1..3;
-   X : constant Cartesian_Axes := 1;
-   Y : constant Cartesian_Axes := 2;
-   Z : constant Cartesian_Axes := 3;
-   -- type Cartesian_Axes is (X, Y, Z);
+   --- X is positive in direction 3762 -> 0451
+   --- Y is positive in direction 3047 -> 2156
+   --- Z is positive in direction 3210 -> 7654
+   subtype Cartesian_Axes is Axes_3D;
+   X : constant Cartesian_Axes := 0;
+   Y : constant Cartesian_Axes := 1;
+   Z : constant Cartesian_Axes := 2;
 
    --- Natural Coordinates (isoparametric representation):
-   --- Xi   is positive in direction +Y: from face 1584 to 2673.
-   --- Eta  is positive in direction -X: from face 1562 to 4873.
-   --- Zeta is positive in direction +Z: from face 1234 to 5678.
-   subtype Natural_Axes is integer range 0..2;
+   --- Directios are like Cartesian rotated 90 degrees CW horizontally:
+   --- Xi   is positive in direction +Y: from face 0473 to 1562.
+   --- Eta  is positive in direction -X: from face 0451 to 3762.
+   --- Zeta is positive in direction +Z: from face 0123 to 4567.
+   subtype Natural_Axes is Axes_3D;
    Xi   : constant Natural_Axes := 0;
    Eta  : constant Natural_Axes := 1;
    Zeta : constant Natural_Axes := 2;
@@ -136,9 +141,22 @@ package LULESH is
      (Element_Index range <>) of NodesPerElement_Index_Array;
    type Face_NodesPerFace_NodesPerElement_Array is array
      (Face_Range, NodesPerFace_Range) of NodesPerElement_Range;
+
+   nodes_of_face : constant Face_NodesPerFace_NodesPerElement_Array :=
+     (0 => (0, 1, 2, 3),
+      1 => (0, 4, 5, 1),
+      2 => (1, 5, 6, 2),
+      3 => (2, 6, 7, 3),
+      4 => (3, 7, 4, 0),
+      5 => (4, 7, 6, 5));
    
    type Cartesian_Natural_Real_Array is 
-     array (Cartesian_Axes, Natural_Axes) Of Real_Type;
+     array (Cartesian_Axes, Natural_Axes) of Real_Type;
+   --- 0..2**Cartesian_Axes'Length-1?
+   type Derivitaves_Range is new Index_Type range 0..7;
+   type Derivitave_Array is
+     array (Cartesian_Axes, Derivitaves_Range) of Real_Type;
+   
 
    type Domain_Record is private;
    type Domain_Access is access Domain_Record;
