@@ -384,8 +384,8 @@ package body LULESH.Init is
       --x    }
       for elem_index in 0..this.numElem-1 loop
          declare
-            local_coords : NodesPerElement_C_Coordinate_Array;
-            elemToNode   : constant NodesPerElement_Index_Array :=
+            local_coords : NodesPerElement_Coordinate_Array;
+            elemToNode   : constant NodesPerElement_Element_Index_Array :=
               this.elements(elem_index).node_indexes;
          begin
             for node in NodesPerElement_Range loop
@@ -464,7 +464,7 @@ package body LULESH.Init is
       meshEdgeElems : constant Element_Index :=
         Element_Index(this.variables.tp)*side_length ;
       node    : Node_Index;
-      t             : C_Coordinate_Vector;
+      t             : Coordinate_Vector;
       zidx          : Element_Index;
       function Calc_T_Part
         (loc        : in Domain_Index;
@@ -572,7 +572,7 @@ package body LULESH.Init is
       nodeElemCounts     : Node_Element_Index_Array_Access;
       nodeElemStart      : Node_Element_Index_Array_Access renames
         this.variables.nodeElemStart;
-      nodeElemCornerList : Node_Element_Index_Array_Access renames
+      nodeElemCornerList : Element_Element_Index_Array_Access renames
         this.variables.nodeElemCornerList;
 
       procedure Count_Elements_For_Each_Node is
@@ -616,8 +616,8 @@ package body LULESH.Init is
       procedure Calc_Nodes_Per_Element_Offset_For_Each_Corner is
       begin
          --x     m_nodeElemCornerList = new Index_t[m_nodeElemStart[numNode()]];
-         nodeElemCornerList := new Node_Element_Index_Array
-           (0..Node_Index(nodeElemStart(this.numNode))-1);
+         nodeElemCornerList := new Element_Element_Index_Array
+           (0..nodeElemStart(this.numNode)-1);
          --x     for (Index_t i=0; i < numNode(); ++i) {
          --x       nodeElemCount[i] = 0;
          --x     }
@@ -638,10 +638,10 @@ package body LULESH.Init is
                declare
                   node   : constant Node_Index :=
                     this.elements(element).node_indexes(enode);
-                  corner_offset : constant Node_Index :=
+                  corner_offset : constant Element_Index :=
                     nodeElemStart(node) + nodeElemCounts(node) ;
-                  Nodes_Per_Element_Offset      : constant Node_Index :=
-                    Node_Index(element * NODES_PER_ELEMENT) + enode ;
+                  Nodes_Per_Element_Offset      : constant Element_Index :=
+                    element * NODES_PER_ELEMENT + Element_Index(enode) ;
                begin
                   nodeElemCornerList(corner_offset) := Nodes_Per_Element_Offset;
                   ---!! Is it ok that this changes from one reference to ther next?
@@ -667,20 +667,20 @@ package body LULESH.Init is
          --x       }
          --x     }
          declare
-            clSize     : constant Node_Index :=
+            clSize     : constant Element_Index :=
               nodeElemStart(this.numNode);
-            max_clSize : constant Node_Index :=
-              Node_Index (this.numElem) * NODES_PER_ELEMENT;
+            max_clSize : constant Element_Index :=
+              this.numElem * NODES_PER_ELEMENT;
          begin
-            for i in 0..clSize-1 loop
+            for element in 0..clSize-1 loop
                declare
-                  clv : constant Node_Index :=
-                    nodeElemCornerList(i);
+                  clv : constant Element_Index :=
+                    nodeElemCornerList(element);
                begin
                   if not (clv in 0 .. max_clSize) then
                      raise Coding_Error with
                        "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"&
-                       "  i:" & i'Img & " clv:" & clv'Img;
+                       "  i:" & element'Img & " clv:" & clv'Img;
                   end if;
                end;
             end loop;
@@ -967,7 +967,7 @@ package body LULESH.Init is
       --x    }
       for region_index in this.Regions'Range loop
          this.regions(region_index).elements := new
-           Element_Index_Array (0..this.regions(region_index).size-1);
+           Element_Element_Index_Array (0..this.regions(region_index).size-1);
          this.regions(region_index).size := 0;
       end loop;
       ---    // Third, fill index sets

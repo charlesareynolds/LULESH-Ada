@@ -66,10 +66,12 @@ package LULESH is
    type Cost_Type    is new Natural;
    ---------------------------------------
 
-   type Element_Index is new Index_Type;
-   type Region_Index  is new Index_Type;
-   type Bisect_Range  is new Index_Type range 0..1;
    type Domain_Index  is new Index_Type;
+   type Element_Index is new Index_Type;
+   subtype Element_Count is  Element_Index;
+   type Node_Index    is new Index_Type;
+   type Region_Index  is new Index_Type;
+   type Thread_Index  is new Index_Type;
 
    type Rank_Type              is new Natural;
    subtype Process_ID_Type     is Rank_Type;
@@ -81,7 +83,6 @@ package LULESH is
    --- 4-5-6-7 are nodes directly above each.
    NODES_PER_ELEMENT : constant := 8;
    NODES_PER_FACE    : constant := 4;
-   type Node_Index               is new Index_Type;
    subtype NodesPerElement_Range is Node_Index range 0..NODES_PER_ELEMENT-1;
    subtype NodesPerFace_Range    is Node_Index range 0..NODES_PER_FACE-1;
 
@@ -91,9 +92,9 @@ package LULESH is
    type Real_Array is array (Index_Type range <>) of Real_Type;
    --     type Real_Array_Access is access Real_Array;
    type Index_Array is array (Index_Type range <>) of Index_Type;
-   type Element_Index_Array is array (Element_Index range <>)
+   type Element_Element_Index_Array is array (Element_Index range <>)
      of Element_Index;
-   type Element_Index_Array_Access is access Element_Index_Array;
+   type Element_Element_Index_Array_Access is access Element_Element_Index_Array;
 
    type Node_Node_Index_Array is array (Node_Index range <>)
      of Node_Index;
@@ -105,6 +106,9 @@ package LULESH is
    type Region_Bin_End_Array is array (Region_Index range <>)
      of Cost_Type;
    type Region_Bin_End_Array_Access is access Region_Bin_End_Array;
+   
+   type Thread_Element_Count_Array is array (Thread_Index range <>) of Element_Count;
+   type Thread_Time_Span_Array is array (Thread_Index range <>) of ART.Time_Span;
    
    --- Using this as a base type instead of having enum types so that 
    --- Ada.Numerics.Generic_Real_Arrays can be used, which requres Integer
@@ -135,27 +139,22 @@ package LULESH is
 
    type FacesPerNode_Element_Index_Array is
      array (Face_Range) of Element_Index;
-   type NodesPerElement_Index_Array is
+   type NodesPerElement_Element_Index_Array is
      array (NodesPerElement_Range) of Node_Index;
-   type NodesPerElement_Index_Array_Array is array
-     (Element_Index range <>) of NodesPerElement_Index_Array;
-   type Face_NodesPerFace_NodesPerElement_Array is array
-     (Face_Range, NodesPerFace_Range) of NodesPerElement_Range;
+   type NodesPerElement_Element_Index_Array_Array is array
+     (Element_Index range <>) of NodesPerElement_Element_Index_Array;
 
-   nodes_of_face : constant Face_NodesPerFace_NodesPerElement_Array :=
+   type NodesPerFace_NodesPerElement_Array is array
+     (NodesPerFace_Range) of NodesPerElement_Range;
+   type Face_NodesPerFace_NodesPerElement_Array_Array is array
+     (Face_Range) of NodesPerFace_NodesPerElement_Array;
+   nodes_of : constant Face_NodesPerFace_NodesPerElement_Array_Array :=
      (0 => (0, 1, 2, 3),
       1 => (0, 4, 5, 1),
       2 => (1, 5, 6, 2),
       3 => (2, 6, 7, 3),
       4 => (3, 7, 4, 0),
       5 => (4, 7, 6, 5));
-   
-   type Cartesian_Natural_Real_Array is 
-     array (Cartesian_Axes, Natural_Axes) of Real_Type;
-   --- 0..2**Cartesian_Axes'Length-1?
-   type Derivitaves_Range is new Index_Type range 0..7;
-   type Derivitave_Array is
-     array (Cartesian_Axes, Derivitaves_Range) of Real_Type;
    
 
    type Domain_Record is private;
@@ -316,69 +315,120 @@ package LULESH is
    --- International System of Units:
    type SI_Type is new Real_Type;
    
-   type Cubic_Meters                 is new SI_Type; -- = m**3
-   type Square_Meters                is new SI_Type; -- = m**2
-   type Joules                       is new SI_Type; -- = N*m
+   type Cubic_Meters                 is new SI_Type; -- m**3
+   type Square_Meters                is new SI_Type; -- m**2
+   type Joules                       is new SI_Type; -- N*m
    type Kilograms                    is new SI_Type; -- "kg"
    type Kilograms_Per_Cubic_Meter    is new SI_Type; -- kg/m**3
    type Meters                       is new SI_Type; -- "m"
-   type Meters_Per_Second            is new SI_Type; -- = m/s
-   type Meters_Per_Second_Per_Second is new SI_Type; -- = m/s**2 
-   type Newtons                      is new SI_Type; -- "N" = kg*m/s**2
-   type Pascals                      is new SI_Type; -- "Pa" = N/m**2
+   type Meters_Per_Second            is new SI_Type; -- m/s
+   type Meters_Per_Second_Per_Second is new SI_Type; -- m/s**2 
+   type Newtons                      is new SI_Type; -- "N"; kg*m/s**2
+   type Pascals                      is new SI_Type; -- "Pa"; N/m**2
    
+   -- Pressure*Area=Force:
+   function "*"(L : in Pascals; R : in Square_Meters) return Newtons is 
+     (Newtons(Real_Type(L)*Real_Type(R)))
+   with inline;
+   function "*"(L : in Square_Meters; R : in Pascals) return Newtons is 
+     (R*L)
+   with inline;
+
    subtype Acceleration is Meters_Per_Second_Per_Second;
+   subtype Area         is Square_Meters; 
    subtype Density      is Kilograms_Per_Cubic_Meter;  
    subtype Energy       is Joules;  
    subtype Force        is Newtons;   
    subtype Length       is Meters;
    subtype Mass         is Kilograms;
    subtype Pressure     is Pascals;
-   subtype Velocity     is Meters_Per_Second;
    subtype Time         is ART.Time;
    subtype Time_Span    is ART.Time_Span;
+   subtype Velocity     is Meters_Per_Second;
    subtype Volume       is Cubic_Meters;
    
-   type Gradient_Type is new Real_Type;
+   type Derivative_Type  is new Real_Type;
+   type Determinant_Type is new Real_Type;
+   type Gradient_Type    is new Real_Type;
+   type Relative_Change  is new Real_Type;
+   type VDOV_Type        is new Real_Type;
+   
+   function "/"(L : in Relative_Change; R : in VDOV_Type) return Time_Span is 
+     (ART.To_Time_Span(Duration(Real_Type(L)*Real_Type(R))))
+   with inline;
 
    -- Provides matrix and vector math:
-   package Length_Matrices   is new Ada.Numerics.Generic_Real_Arrays (Length);
+   package Area_Arrays     is new Ada.Numerics.Generic_Real_Arrays (Area);
+   package Force_Arrays    is new Ada.Numerics.Generic_Real_Arrays (Force);
+   package Length_Arrays   is new Ada.Numerics.Generic_Real_Arrays (Length);
+   package Pressure_Arrays is new Ada.Numerics.Generic_Real_Arrays (Pressure);
 
    type Acceleration_Vector  is array (Cartesian_Axes) of Acceleration;
-   type C_Coordinate_Vector  is new Length_Matrices.Real_Vector (Cartesian_Axes);
-   type Force_Vector         is array (Cartesian_Axes) of Force;
+   type Area_Vector          is new Area_Arrays.Real_Vector (Cartesian_Axes);
+   type Coordinate_Vector    is new Length_Arrays.Real_Vector (Cartesian_Axes);
+--     type Derivative_Vector    is array (Cartesian_Axes) of Derivative_Type;
+   type Force_Vector         is new Force_Arrays.Real_Vector (Cartesian_Axes);
    type Gradient_Vector      is array (Natural_Axes)   of Gradient_Type;
-   type N_Coordinate_Vector  is new Length_Matrices.Real_Vector (Natural_Axes);
+   type Pressure_Vector      is new Pressure_Arrays.Real_Vector (Cartesian_Axes);
    type Strain_Vector        is array (Cartesian_Axes) of Length;
    type Velocity_Vector      is array (Cartesian_Axes) of Velocity;
-
    subtype Size_Type         is Element_Index;
-   type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;
+   type Cartesian_Size_Array is array (Cartesian_Axes) of Size_Type;   
+
+   type Node_Area_Vector_Array             is array (Node_Index range <>) of Area_Vector;
+   type Node_Coordinate_Array              is array (Node_Index range <>) of Coordinate_Vector;
+--     type Node_Derivative_Vector_Array       is array (Node_Index range <>) of Derivative_Vector;
+   type Node_Force_Vector_Array            is array (Node_Index range <>) of Force_Vector;
+   type Node_Force_Vector_Array_Access     is access Node_Force_Vector_Array;
+   --     type Gradient_Array              is array (Node_Index range <>) of Gradient_Vector;
    
-
-   type Force_Vector_Array        is array (Node_Index range <>) of Force_Vector;
-   type Force_Vector_Array_Access is access Force_Vector_Array;
---     type Gradient_Array     is array (Node_Index range <>) of Gradient_Vector;
-   type C_Coordinate_Array        is array (Node_Index range <>) of C_Coordinate_Vector;
-
-   type NodesPerElement_C_Coordinate_Array is new C_Coordinate_Array
-     (NodesPerElement_Range);
-   type NodesPerFace_C_Coordinate_Array    is new C_Coordinate_Array
-     (NodesPerFace_Range);
-
-   type NodesPerElement_Force_Vector_Array is new Force_Vector_Array
-     (NodesPerElement_Range);
-
+   subtype NodesPerElement_Area_Vector_Array is 
+     Node_Area_Vector_Array (NodesPerElement_Range);
+   subtype NodesPerElement_Coordinate_Array is
+     Node_Coordinate_Array (NodesPerElement_Range);
+--     subtype NodesPerElement_Derivative_Vector_Array is 
+--       Node_Derivative_Vector_Array (NodesPerElement_Range);
+   subtype NodesPerElement_Force_Vector_Array is 
+     Node_Force_Vector_Array (NodesPerElement_Range);
+   subtype NodesPerFace_Area_Vector_Array is  
+     Node_Area_Vector_Array (NodesPerFace_Range);
+   subtype NodesPerFace_Coordinate_Array is  
+     Node_Coordinate_Array (NodesPerFace_Range);
+   
+   type Element_Pressure_Vector_Array is array
+     (Element_Index range <>) of Pressure_Vector;
+   type Element_Pressure_Vector_Array_Access is access
+     Element_Pressure_Vector_Array;
+   type Element_NodesPerElement_Force_Vector_Array_Array is array
+     (Element_Index range <>) of NodesPerElement_Force_Vector_Array;
+   type Element_NodesPerElement_Force_Vector_Array_Array_Access is access
+     Element_NodesPerElement_Force_Vector_Array_Array;
+   
    type Cartesian_Natural_Length_Array is 
      array (Cartesian_Axes, Natural_Axes) Of Length;
 
    type Symmetry_Node_Array is array (Cartesian_Axes) of Node_Index;
 
+   type Cartesian_Natural_Real_Array is 
+     array (Cartesian_Axes, Natural_Axes) of Real_Type;
+   
+   --- 0..2**Cartesian_Axes'Length-1?
+   type Derivatives_Range is new Index_Type range 0..7;
+   type Derivative_Cartesian_Real_Array is 
+     array (Derivatives_Range, Cartesian_Axes) of Real_Type;
+   --     type Derivative_Array is array (Derivatives_Range) of C_Coordinate_Vector;
+   type Element_Determinant_Array is array (Element_Index range <>) of Determinant_Type;
+   type Element_Determinant_Array_Access is access Element_Determinant_Array;
+   type Element_Volume_Array is array (Element_Index range <>) of Volume;
+   type Element_Volume_Array_Access is access Element_Volume_Array;
+   type Node_Volume_Array is array (Node_Index range <>) of Volume;
+   
+
    type Node_Record is record
       --x    std::vector<Real_t> m_x ;  /* coordinates */
       --x    std::vector<Real_t> m_y ;
       --x    std::vector<Real_t> m_z ;
-      coordinate           : C_Coordinate_Vector;
+      coordinate           : Coordinate_Vector;
       --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
       --x    std::vector<Index_t> m_symmY ;
       --x    std::vector<Index_t> m_symmZ ;
@@ -412,7 +462,7 @@ package LULESH is
 
    type Element_Record is record
       --x    std::vector<Index_t>  m_nodelist ;     /* elemToNode connectivity */
-      node_indexes : NodesPerElement_Index_Array;
+      node_indexes : NodesPerElement_Element_Index_Array;
       --x    std::vector<Index_t>  m_lxim ;  /* element connectivity across each face */
       --x    std::vector<Index_t>  m_lxip ;
       --x    std::vector<Index_t>  m_letam ;
@@ -446,7 +496,7 @@ package LULESH is
       dynamic_pressure           : Pressure;
       dynamic_pressure_linear    : Pressure;
       dynamic_pressure_quadratic : Pressure;
-      sig                        : Force_Vector;
+--        stress_integrated          : Force_Vector;
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
       --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
@@ -455,8 +505,8 @@ package LULESH is
       relative_volume               : Volume;
       reference_volume              : Volume;
       new_relative_volume           : Volume;
-      relative_volume_delta         : Volume;
-      volume_derivative_over_volume : Volume;
+      new_relative_volume_delta     : Volume;
+      volume_derivative_over_volume : VDOV_Type;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
       characteristic_length : Length;
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
@@ -474,7 +524,7 @@ package LULESH is
       --x    Index_t *m_regElemSize ;   // Size of region sets
       size     : Element_Index;
       --x    Index_t **m_regElemlist ;  // region indexset
-      elements : Element_Index_Array_Access;
+      elements : Element_Element_Index_Array_Access;
    end record;
    type Region_Array is array (Region_Index range <>) of Region_Record;
    type Region_Array_Access is access Region_Array;
@@ -520,7 +570,7 @@ package LULESH is
       --    Index_t *m_nodeElemStart ;
       --    Index_t *m_nodeElemCornerList ;
       nodeElemStart      : Node_Element_Index_Array_Access;
-      nodeElemCornerList : Node_Element_Index_Array_Access;
+      nodeElemCornerList : Element_Element_Index_Array_Access;
 
       --x    Index_t m_maxPlaneSize ;
       --x    Index_t m_maxEdgeSize ;
@@ -583,7 +633,8 @@ package LULESH is
       eosvmin            : Real_Type;
       pressure_floor     : Pressure;
       energy_floor       : Energy;
-      volume_delta_max   : Volume;
+      dvovmax            : Relative_Change;
+--        volume_delta_max   : Volume;
       reference_density  : Density;
       --x    Int_t    m_cost; //imbalance cost
       imbalance_cost     : Cost_Type;

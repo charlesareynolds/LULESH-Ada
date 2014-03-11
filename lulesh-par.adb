@@ -65,17 +65,17 @@ package body LULESH.Par is
    twelveth : constant := 1.0/12.0;
    
    function CalcElemVolume
-     (nodes : in NodesPerElement_C_Coordinate_Array)
+     (nodes : in NodesPerElement_Coordinate_Array)
       return Volume
    is
       --- n is just for conciseness below:
-      n : constant NodesPerElement_C_Coordinate_Array := nodes;
+      n : constant NodesPerElement_Coordinate_Array := nodes;
       result : Volume := 0.0;
       --x  #define TRIPLE_PRODUCT(x1, y1, z1, x2, y2, z2, x3, y3, z3) \
       --x     ((x1)*((y2)*(z3) - (z2)*(y3)) + (x2)*((z1)*(y3) - (y1)*(z3)) + (x3)*((y1)*(z2) - (z1)*(y2)))
 
       function Triple_Product 
-        (C1, C2, C3 : in C_Coordinate_Vector) 
+        (C1, C2, C3 : in Coordinate_Vector) 
          return Volume 
         with Inline is        
       begin
