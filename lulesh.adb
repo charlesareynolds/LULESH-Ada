@@ -2665,103 +2665,184 @@ package body LULESH is
    --    Release(&e_old) ;
    -- }
 
-   -- /******************************************/
+   --- /******************************************/
 
    -- static inline
    -- void ApplyMaterialPropertiesForElems(Domain& domain, Real_t vnew[])
-   -- {
-   --    Index_t numElem = domain.numElem() ;
+   --x {
+   procedure ApplyMaterialPropertiesForElems
+     (domain : in out Domain_Record;
+      vnew   : access Element_Volume_Array)
+     with Inline
+   is
+      --x    Index_t numElem = domain.numElem() ;
+      numElem : constant Element_Count := domain.numElem;
+   begin
+      --   if (numElem != 0) {
+      if numElem /=0 then
+         declare
+            ---     /* Expose all of the variables needed for material evaluation */
+            --x     Real_t eosvmin = domain.eosvmin() ;
+            --x     Real_t eosvmax = domain.eosvmax() ;
+            eosvmin : constant Volume := domain.parameters.eosvmin;
+            eosvmax : constant Volume := domain.parameters.eosvmax;
+         begin
+            -- #pragma omp parallel
+            --     {
+            ---        // Bound the updated relative volumes with eosvmin/max
+            --x        if (eosvmin != Real_t(0.)) {
+            -- #pragma omp for firstprivate(numElem)
+            --x           for(Index_t i=0 ; i<numElem ; ++i) {
+            --x              if (vnew[i] < eosvmin)
+            --x                 vnew[i] = eosvmin ;
+            --x           }
+            --x        }
+            if eosvmin /= 0.0 then
+               for element in 0..numElem-1 loop
+                  if vnew(element) < eosvmin then
+                     vnew(element) := eosvmin;
+                  end if;
+               end loop;
+            end if;
+            --x        if (eosvmax != Real_t(0.)) {
+            -- #pragma omp for nowait firstprivate(numElem)
+            --x           for(Index_t i=0 ; i<numElem ; ++i) {
+            --x              if (vnew[i] > eosvmax)
+            --x                 vnew[i] = eosvmax ;
+            --x           }
+            --x        }
+            if eosvmax /= 0.0 then
+               for element in 0..numElem-1 loop
+                  if vnew(element) > eosvmax then
+                     vnew(element) := eosvmax;
+                  end if;
+               end loop;
+            end if;
+            ---        // This check may not make perfect sense in LULESH, but
+            ---        // it's representative of something in the full code -
+            ---        // just leave it in, please
+            -- #pragma omp for nowait firstprivate(numElem)
+            --x        for (Index_t i=0; i<numElem; ++i) {
+            --x           Real_t vc = domain.v(i) ;
+            --x           if (eosvmin != Real_t(0.)) {
+            --x              if (vc < eosvmin)
+            --x                 vc = eosvmin ;
+            --x           }
+            --x           if (eosvmax != Real_t(0.)) {
+            --x              if (vc > eosvmax)
+            --x                 vc = eosvmax ;
+            --x           }
+            --x           if (vc <= 0.) {
+            -- #if USE_MPI
+            --              MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
+            -- #else
+            --x              exit(VolumeError);
+            -- #endif
+            --x           }
+            --x        }
+            for element in 0..numElem-1 loop
+               declare
+                  vc : Volume := domain.elements(element).relative_volume;
+               begin
+                  if eosvmin /= 0.0 then
+                     if vc < eosvmin then
+                        vc := eosvmin ;
+                     end if;
+                  end if;
+                  if eosvmax /= 0.0 then
+                     if vc > eosvmax then
+                        vc := eosvmax ;
+                     end if;
+                  end if;
+                  if vc <= 0.0 then
+                     raise VolumeError;
+                  end if;
+                  end;
+            end loop;
+            --     }
+            --x     for (Int_t r=0 ; r<domain.numReg() ; r++) {
+            --        Index_t numElemReg = domain.regElemSize(r);
+            --        Index_t *regElemList = domain.regElemlist(r);
+            --        Int_t rep;
+            --        //Determine load imbalance for this region
+            --        //round down the number with lowest cost
+            --        if(r < domain.numReg()/2)
+            -- 	rep = 1;
+            --        //you don't get an expensive region unless you at least have 5 regions
+            --        else if(r < (domain.numReg() - (domain.numReg()+15)/20))
+            --          rep = 1 + domain.cost();
+            --        //very expensive regions
+            --        else
+            -- 	rep = 10 * (1+ domain.cost());
+            --        EvalEOSForElems(domain, vnew, numElemReg, regElemList, rep);
+            --x     }
+            for region in 0..domain.numReg-1 loop
+               declare
+                  numElemReg : constant Element_Count :=
+                    domain.regions(region).size;
+                  regElemList : constant Element_Element_Index_Array_Access :=
+                    domain.regions(region).elements;
+                  rep         : Cost_Type;
+               begin
+                  --        //Determine load imbalance for this region
+                  --        //round down the number with lowest cost
+                  if region < domain.numReg/2 then
+                     --        //you don't get an expensive region unless you at least have 5 regions
+                     rep := 1;
+                  elsif region < (domain.numReg - (domain.numReg+15)/20) then
+                     rep := 1 + domain.parameters.imbalance_cost;
+                     --        //very expensive regions
+                  else
+                     rep := 10 * (1 + domain.parameters.imbalance_cost);
+                     EvalEOSForElems(domain, vnew, numElemReg, regElemList, rep);
+                  end if;
+               end;
+            end loop;
+            --x   }
+         end;
+      end if;
+      --x }
+   end ApplyMaterialPropertiesForElems;
 
-   --   if (numElem != 0) {
-   --     /* Expose all of the variables needed for material evaluation */
-   --     Real_t eosvmin = domain.eosvmin() ;
-   --     Real_t eosvmax = domain.eosvmax() ;
+   --- /******************************************/
 
-   -- #pragma omp parallel
-   --     {
-   --        // Bound the updated relative volumes with eosvmin/max
-   --        if (eosvmin != Real_t(0.)) {
-   -- #pragma omp for firstprivate(numElem)
-   --           for(Index_t i=0 ; i<numElem ; ++i) {
-   --              if (vnew[i] < eosvmin)
-   --                 vnew[i] = eosvmin ;
-   --           }
-   --        }
+   --x static inline
+   --x void UpdateVolumesForElems(Domain &domain, Real_t *vnew,
+   --x                            Real_t v_cut, Index_t length)
+   --x {
+   procedure UpdateVolumesForElems
+     (domain : in out Domain_Record;
+      vnew   : access Element_Volume_Array)
+     with Inline
+   is
+      Length : constant Element_Count := domain.numElem;
+   begin
+      --x    if (length != 0) {
+      -- #pragma omp parallel for firstprivate(length, v_cut)
+      --x       for(Index_t i=0 ; i<length ; ++i) {
+      --x          Real_t tmpV = vnew[i] ;
+      --x          if ( FABS(tmpV - Real_t(1.0)) < v_cut )
+      --x             tmpV = Real_t(1.0) ;
+      --x          domain.v(i) = tmpV ;
+      --x       }
+      --x    }
+      if length > 0 then
+         for element in 0..length-1 loop
+            declare
+               tmpV : Volume := vnew(element);
+            begin
+               if abs(tmpV - 1.0) < domain.parameters.relative_volume_tolerance then
+                  tmpV := 1.0;
+               end if;
+               domain.elements(element).relative_volume := tmpV ;
+            end;
+         end loop;
+      end if;
+      --x    return ;
+      --x }
+   end UpdateVolumesForElems;
 
-   --        if (eosvmax != Real_t(0.)) {
-   -- #pragma omp for nowait firstprivate(numElem)
-   --           for(Index_t i=0 ; i<numElem ; ++i) {
-   --              if (vnew[i] > eosvmax)
-   --                 vnew[i] = eosvmax ;
-   --           }
-   --        }
-
-   --        // This check may not make perfect sense in LULESH, but
-   --        // it's representative of something in the full code -
-   --        // just leave it in, please
-   -- #pragma omp for nowait firstprivate(numElem)
-   --        for (Index_t i=0; i<numElem; ++i) {
-   --           Real_t vc = domain.v(i) ;
-   --           if (eosvmin != Real_t(0.)) {
-   --              if (vc < eosvmin)
-   --                 vc = eosvmin ;
-   --           }
-   --           if (eosvmax != Real_t(0.)) {
-   --              if (vc > eosvmax)
-   --                 vc = eosvmax ;
-   --           }
-   --           if (vc <= 0.) {
-   -- #if USE_MPI
-   --              MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
-   -- #else
-   --              exit(VolumeError);
-   -- #endif
-   --           }
-   --        }
-   --     }
-
-   --     for (Int_t r=0 ; r<domain.numReg() ; r++) {
-   --        Index_t numElemReg = domain.regElemSize(r);
-   --        Index_t *regElemList = domain.regElemlist(r);
-   --        Int_t rep;
-   --        //Determine load imbalance for this region
-   --        //round down the number with lowest cost
-   --        if(r < domain.numReg()/2)
-   -- 	rep = 1;
-   --        //you don't get an expensive region unless you at least have 5 regions
-   --        else if(r < (domain.numReg() - (domain.numReg()+15)/20))
-   --          rep = 1 + domain.cost();
-   --        //very expensive regions
-   --        else
-   -- 	rep = 10 * (1+ domain.cost());
-   --        EvalEOSForElems(domain, vnew, numElemReg, regElemList, rep);
-   --     }
-
-   --   }
-   -- }
-
-   -- /******************************************/
-
-   -- static inline
-   -- void UpdateVolumesForElems(Domain &domain, Real_t *vnew,
-   --                            Real_t v_cut, Index_t length)
-   -- {
-   --    if (length != 0) {
-   -- #pragma omp parallel for firstprivate(length, v_cut)
-   --       for(Index_t i=0 ; i<length ; ++i) {
-   --          Real_t tmpV = vnew[i] ;
-
-   --          if ( FABS(tmpV - Real_t(1.0)) < v_cut )
-   --             tmpV = Real_t(1.0) ;
-
-   --          domain.v(i) = tmpV ;
-   --       }
-   --    }
-
-   --    return ;
-   -- }
-
-   -- /******************************************/
+   --- /******************************************/
 
    --x static inline
    --x void LagrangeElements(Domain& domain, Index_t numElem)
@@ -2773,16 +2854,16 @@ package body LULESH is
       vnew : Element_Volume_Array_Access;
    begin
       vnew := new Element_Volume_Array (0..domain.numElem-1);
-      --   CalcLagrangeElements(domain, vnew) ;
-      --   /* Calculate Q.  (Monotonic q option requires communication) */
-      --   CalcQForElems(domain, vnew) ;
-      --   ApplyMaterialPropertiesForElems(domain, vnew) ;
-      --   UpdateVolumesForElems(domain, vnew,
-      --                         domain.v_cut(), numElem) ;
+      --x   CalcLagrangeElements(domain, vnew) ;
+      --x   /* Calculate Q.  (Monotonic q option requires communication) */
+      --x   CalcQForElems(domain, vnew) ;
+      --x   ApplyMaterialPropertiesForElems(domain, vnew) ;
+      --x   UpdateVolumesForElems(domain, vnew,
+      --x                         domain.v_cut(), numElem) ;
       CalcLagrangeElements (domain, vnew);
       CalcQForElems (domain, vnew);
       ApplyMaterialPropertiesForElems (domain, vnew);
-      UpdateVolumesForElems (domain, vnew, domain.parameters.relative_volume_tolerance);
+      UpdateVolumesForElems (domain, vnew);
       --x   Release(&vnew);
       Free (vnew);
       --x }
@@ -2794,98 +2875,142 @@ package body LULESH is
    --                                    Index_t *regElemlist,
    --                                    Real_t qqc, Real_t& dtcourant)
    -- {
-   -- #if _OPENMP
-   --    Index_t threads = omp_get_max_threads();
-   --    static Index_t *courant_elem_per_thread;
-   --    static Real_t *dtcourant_per_thread;
-   --    static bool first = true;
-   --    if (first) {
-   --      courant_elem_per_thread = new Index_t[threads];
-   --      dtcourant_per_thread = new Real_t[threads];
-   --      first = false;
-   --    }
-   -- #else
-   --    Index_t threads = 1;
-   --    Index_t courant_elem_per_thread[1];
-   --    Real_t  dtcourant_per_thread[1];
-   -- #endif
+   procedure CalcCourantConstraintForElems
+     (domain : in out Domain_Record;
+      region : in     Region_Index)
+     with inline
+   is
+      -- #if _OPENMP
+      --    Index_t threads = omp_get_max_threads();
+      --    static Index_t *courant_elem_per_thread;
+      --    static Real_t *dtcourant_per_thread;
+      --    static bool first = true;
+      --    if (first) {
+      --      courant_elem_per_thread = new Index_t[threads];
+      --      dtcourant_per_thread = new Real_t[threads];
+      --      first = false;
+      --    }
+      -- #else
+      --x    Index_t threads = 1;
+      --x    Index_t courant_elem_per_thread[1];
+      --x    Real_t  dtcourant_per_thread[1];
+      threads                 : constant Thread_Index := 1;
+      courant_elem_per_thread : Thread_Element_Count_Array (0..threads-1);
+      dtcourant_per_thread    : Thread_Time_Span_Array (0..threads-1);
+      -- #endif
 
+      -- #pragma omp parallel firstprivate(length, qqc)
+      --    {
+      --x       Real_t   qqc2 = Real_t(64.0) * qqc * qqc ;
+      --x       Real_t   dtcourant_tmp = dtcourant;
+      --x       Index_t  courant_elem  = -1 ;
+      qqc2          : constant Real_Type := 64.0 * domain.parameters.qqc**2;
+      dtcourant_tmp : Time_Span := domain.variables.dtcourant;
+      -- Picking an unlikely number instead of -1:
+      NEVER_SET     : constant Element_Count := 2_000_000_003;
+      courant_elem  : Element_Count := NEVER_SET;
 
-   -- #pragma omp parallel firstprivate(length, qqc)
-   --    {
-   --       Real_t   qqc2 = Real_t(64.0) * qqc * qqc ;
-   --       Real_t   dtcourant_tmp = dtcourant;
-   --       Index_t  courant_elem  = -1 ;
+      -- #if _OPENMP
+      --       Index_t thread_num = omp_get_thread_num();
+      -- #else
+      --x       Index_t thread_num = 0;
+      thread_num : constant Thread_Index := 0;
+      -- #endif
+      use type ART.Time_Span;
+   begin
+      -- #pragma omp for
+      --x       for (Index_t i = 0 ; i < length ; ++i) {
+      --x          Index_t indx = regElemlist[i] ;
+      --x          Real_t dtf = domain.ss(indx) * domain.ss(indx) ;
+      --x          if ( domain.vdov(indx) < Real_t(0.) ) {
+      --x             dtf = dtf
+      --x                 + qqc2 * domain.arealg(indx) * domain.arealg(indx)
+      --x                 * domain.vdov(indx) * domain.vdov(indx) ;
+      --x          }
+      --x          dtf = SQRT(dtf) ;
+      --x          dtf = domain.arealg(indx) / dtf ;
+      for region_element in domain.regions(region).elements'Range loop
+         declare
+            element : constant Element_Index :=
+              domain.regions(region).elements(region_element);
+            dtf     : Time_Span :=
+              ART.Time_Span_Last;
+            ss      : constant Real_Type := Real_Type
+              (domain.elements(element).sound_speed);
+            vdov    : constant Real_Type := Real_Type
+              (domain.elements(element).volume_derivative_over_volume);
+            arealg  : constant Real_Type := Real_Type
+              (domain.elements(element).characteristic_length);
+         begin
+            if vdov < 0.0 then
+               dtf := To_Time_Span
+                 (arealg / SQRT(ss**2 + qqc2 * arealg**2 * vdov**2));
+            else
+               dtf := To_Time_Span
+                 (arealg / abs(ss));
+            end if;
+            --x          if (domain.vdov(indx) != Real_t(0.)) {
+            --x             if ( dtf < dtcourant_tmp ) {
+            --x                dtcourant_tmp = dtf ;
+            --x                courant_elem  = indx ;
+            --x             }
+            --x          }
+            --x       }
+            if vdov /= 0.0 and then dtcourant_tmp > dtf then
+               dtcourant_tmp := dtf;
+               courant_elem  := element;
+            end if;
+         end;
+      end loop;
+      --x       dtcourant_per_thread[thread_num]    = dtcourant_tmp ;
+      --x       courant_elem_per_thread[thread_num] = courant_elem ;
+      --    }
+      dtcourant_per_thread(thread_num)    := dtcourant_tmp;
+      courant_elem_per_thread(thread_num) := courant_elem;
+      --x    for (Index_t i = 1; i < threads; ++i) {
+      --x       if (dtcourant_per_thread[i] < dtcourant_per_thread[0] ) {
+      --x          dtcourant_per_thread[0]    = dtcourant_per_thread[i];
+      --x          courant_elem_per_thread[0] = courant_elem_per_thread[i];
+      --x       }
+      --x    }
+      for thread in 0..threads loop
+         if dtcourant_per_thread(thread) < dtcourant_per_thread(0) then
+            dtcourant_per_thread(0)    := dtcourant_per_thread(thread);
+            courant_elem_per_thread(0) := courant_elem_per_thread(thread);
+         end if;
+      end loop;
+      --x    if (courant_elem_per_thread[0] != -1) {
+      --x       dtcourant = dtcourant_per_thread[0] ;
+      --x    }
+      if courant_elem_per_thread(0) /= NEVER_SET then
+        domain.variables.dtcourant := dtcourant_per_thread(0);
+      end if;
+      --x    return ;
+      --x }
+   end CalcCourantConstraintForElems;
 
-   -- #if _OPENMP
-   --       Index_t thread_num = omp_get_thread_num();
-   -- #else
-   --       Index_t thread_num = 0;
-   -- #endif
+   --x /******************************************/
 
-   -- #pragma omp for
-   --       for (Index_t i = 0 ; i < length ; ++i) {
-   --          Index_t indx = regElemlist[i] ;
-   --          Real_t dtf = domain.ss(indx) * domain.ss(indx) ;
-
-   --          if ( domain.vdov(indx) < Real_t(0.) ) {
-   --             dtf = dtf
-   --                 + qqc2 * domain.arealg(indx) * domain.arealg(indx)
-   --                 * domain.vdov(indx) * domain.vdov(indx) ;
-   --          }
-
-   --          dtf = SQRT(dtf) ;
-   --          dtf = domain.arealg(indx) / dtf ;
-
-   --          if (domain.vdov(indx) != Real_t(0.)) {
-   --             if ( dtf < dtcourant_tmp ) {
-   --                dtcourant_tmp = dtf ;
-   --                courant_elem  = indx ;
-   --             }
-   --          }
-   --       }
-
-   --       dtcourant_per_thread[thread_num]    = dtcourant_tmp ;
-   --       courant_elem_per_thread[thread_num] = courant_elem ;
-   --    }
-
-   --    for (Index_t i = 1; i < threads; ++i) {
-   --       if (dtcourant_per_thread[i] < dtcourant_per_thread[0] ) {
-   --          dtcourant_per_thread[0]    = dtcourant_per_thread[i];
-   --          courant_elem_per_thread[0] = courant_elem_per_thread[i];
-   --       }
-   --    }
-
-   --    if (courant_elem_per_thread[0] != -1) {
-   --       dtcourant = dtcourant_per_thread[0] ;
-   --    }
-
-   --    return ;
-
-   -- }
-
-   -- /******************************************/
-
-   -- static inline
-   -- void ((Domain &domain, Index_t length,
-   --                                  Index_t *regElemlist, Real_t dvovmax, Real_t& dthydro)
-   -- {
+   --x static inline
+   --x void ((Domain &domain, Index_t length,
+   --x                                  Index_t *regElemlist, Real_t dvovmax, Real_t& dthydro)
+   --x {
    procedure CalcHydroConstraintForElems
      (domain : in out Domain_Record;
       region : in     Region_Index)
      with inline
    is
-   -- #if _OPENMP
-   --    Index_t threads = omp_get_max_threads();
-   --    static Index_t *hydro_elem_per_thread;
-   --    static Real_t *dthydro_per_thread;
-   --    static bool first = true;
-   --    if (first) {
-   --      hydro_elem_per_thread = new Index_t[threads];
-   --      dthydro_per_thread = new Real_t[threads];
-   --      first = false;
-   --    }
-   -- #else
+      -- #if _OPENMP
+      --    Index_t threads = omp_get_max_threads();
+      --    static Index_t *hydro_elem_per_thread;
+      --    static Real_t *dthydro_per_thread;
+      --    static bool first = true;
+      --    if (first) {
+      --      hydro_elem_per_thread = new Index_t[threads];
+      --      dthydro_per_thread = new Real_t[threads];
+      --      first = false;
+      --    }
+      -- #else
       --x    Index_t threads = 1;
       --x    Index_t hydro_elem_per_thread[1];
       --x    Real_t  dthydro_per_thread[1];
@@ -2893,7 +3018,6 @@ package body LULESH is
       hydro_elem_per_thread : Thread_Element_Count_Array (0..threads-1);
       dthydro_per_thread    : Thread_Time_Span_Array (0..threads-1);
       -- #endif
-
       -- #pragma omp parallel firstprivate(length, dvovmax)
       --    {
       --x       Real_t dthydro_tmp = dthydro ;
@@ -2930,7 +3054,7 @@ package body LULESH is
          begin
             if vdov /= 0.0 then
                declare
-                  -- dvovmax/vdov=(dv/vmax)/(vd/v)=(dv*v)/(vmax*vd)=dv/vd
+                  --- dvovmax/vdov=(dv/vmax)/(vd/v)=(dv*v)/(vmax*vd)=dv/vd
                   dtdvov : constant Time_Span :=
                     domain.parameters.dvovmax / (abs(vdov)+1.0e-20);
                begin
@@ -2942,13 +3066,11 @@ package body LULESH is
             end if;
          end;
       end loop;
-
       --x       dthydro_per_thread[thread_num]    = dthydro_tmp ;
       --x       hydro_elem_per_thread[thread_num] = hydro_elem ;
       --    }
       dthydro_per_thread(thread_num)    := dthydro_tmp;
       hydro_elem_per_thread(thread_num) := hydro_elem;
-
       --x    for (Index_t i = 1; i < threads; ++i) {
       --x       if(dthydro_per_thread[i] < dthydro_per_thread[0]) {
       --x          dthydro_per_thread[0]    = dthydro_per_thread[i];
@@ -2961,14 +3083,12 @@ package body LULESH is
             hydro_elem_per_thread(0) := hydro_elem_per_thread(thread);
          end if;
       end loop;
-
       --x    if (hydro_elem_per_thread[0] != -1) {
       --x       dthydro =  dthydro_per_thread[0] ;
       --x    }
       if hydro_elem_per_thread(0) /= NEVER_SET then
         domain.variables.dthydro := dthydro_per_thread(0);
-     end if;
-
+      end if;
    --x    return ;
    --x }
    end CalcHydroConstraintForElems;
@@ -3011,7 +3131,8 @@ package body LULESH is
    ----------------------
    -- EXPORTED (private):
    ----------------------
-   procedure LagrangeLeapFrog (domain : in out Domain_Record) is
+   procedure LagrangeLeapFrog
+     (domain : in out Domain_Record) is
       --x {
    begin
       -- #ifdef SEDOV_SYNC_POS_VEL_LATE

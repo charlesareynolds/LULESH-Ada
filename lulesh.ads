@@ -3,6 +3,7 @@ with Ada.Containers.Vectors;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Numerics.Generic_Real_Arrays;
 with Ada.Real_Time;
+with Ada.Unchecked_Deallocation;
 
 with Interfaces;
 
@@ -60,7 +61,7 @@ package LULESH is
    type real8        is new Interfaces.IEEE_Float_64;
    type real10       is new Interfaces.IEEE_Extended_Float;
    type Index_Type   is new Natural;
-   type Real_Type    is new real8;
+   subtype Real_Type is real8;
    type Int_t        is new Integer;
    type Balance_Type is new Natural;
    type Cost_Type    is new Natural;
@@ -357,6 +358,9 @@ package LULESH is
      (ART.To_Time_Span(Duration(Real_Type(L)*Real_Type(R))))
    with inline;
 
+   function To_Time_Span (this : in Real_Type) return Time_Span is
+     (ART.To_Time_Span(Duration(this)));
+     
    -- Provides matrix and vector math:
    package Area_Arrays     is new Ada.Numerics.Generic_Real_Arrays (Area);
    package Force_Arrays    is new Ada.Numerics.Generic_Real_Arrays (Force);
@@ -399,6 +403,9 @@ package LULESH is
      (Element_Index range <>) of Pressure_Vector;
    type Element_Pressure_Vector_Array_Access is access
      Element_Pressure_Vector_Array;
+   procedure Free is new Ada.Unchecked_Deallocation
+     (Element_Pressure_Vector_Array, Element_Pressure_Vector_Array_Access);
+
    type Element_NodesPerElement_Force_Vector_Array_Array is array
      (Element_Index range <>) of NodesPerElement_Force_Vector_Array;
    type Element_NodesPerElement_Force_Vector_Array_Array_Access is access
@@ -419,8 +426,14 @@ package LULESH is
    --     type Derivative_Array is array (Derivatives_Range) of C_Coordinate_Vector;
    type Element_Determinant_Array is array (Element_Index range <>) of Determinant_Type;
    type Element_Determinant_Array_Access is access Element_Determinant_Array;
+   procedure Free is new Ada.Unchecked_Deallocation
+     (Element_Determinant_Array, Element_Determinant_Array_Access);
+   
    type Element_Volume_Array is array (Element_Index range <>) of Volume;
    type Element_Volume_Array_Access is access Element_Volume_Array;
+   procedure Free is new Ada.Unchecked_Deallocation
+     (Element_Volume_Array, Element_Volume_Array_Access);
+   
    type Node_Volume_Array is array (Node_Index range <>) of Volume;
    
 
@@ -629,8 +642,8 @@ package LULESH is
       qlc_monoq          : Real_Type;
       qqc_monoq          : Real_Type;
       qqc                : Real_Type;
-      eosvmax            : Real_Type;
-      eosvmin            : Real_Type;
+      eosvmax            : Volume;
+      eosvmin            : Volume;
       pressure_floor     : Pressure;
       energy_floor       : Energy;
       dvovmax            : Relative_Change;
@@ -685,11 +698,11 @@ private
    --x static inline
    --x void TimeIncrement(Domain& domain)
    procedure TimeIncrement (domain : in out Domain_Record)
-   with Inline;
+     with Inline;
 
    --x static inline
    --x void LagrangeLeapFrog(Domain& domain)
    procedure LagrangeLeapFrog (domain : in out Domain_Record)
-   with Inline;
+     with Inline;
 
 end LULESH;
