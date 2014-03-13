@@ -212,8 +212,8 @@ package body LULESH.Init is
       this.parameters :=
         (energy_tolerance           => 1.0e-7,
          pressure_tolerance         => 1.0e-7,
-         dynamic_pressure_tolerance => 1.0e-7,
-         relative_volume_tolerance  => 1.0e-10,
+         pressure_dynamic_tolerance => 1.0e-7,
+         volume_relative_tolerance  => 1.0e-10,
          velocity_tolerance         => 1.0e-7,
          hgcoef                     => 3.0,
          four_thirds                => 4.0/3.0,
@@ -227,7 +227,7 @@ package body LULESH.Init is
          eosvmin                    => 1.0e-9,
          pressure_floor             => 0.0,
          energy_floor               => -1.0e+15,
-         volume_delta_max           => 0.1,
+         dvovmax                     => 0.1,
          reference_density          => 1.0,
          --x    this->cost() = cost;
          imbalance_cost             => cost,
@@ -283,10 +283,10 @@ package body LULESH.Init is
       --x    }
       for index in 0..this.numElem-1 loop
          this.elements(index).eenergy           := 0.0;
-         this.elements(index).static_pressure  := 0.0;
-         this.elements(index).dynamic_pressure := 0.0;
+         this.elements(index).pressure_static  := 0.0;
+         this.elements(index).pressure_dynamic := 0.0;
          this.elements(index).sound_speed      := 0.0;
-         this.elements(index).relative_volume  := 1.0;
+         this.elements(index).volume_relative  := 1.0;
       end loop;
       --x    for (Index_t i=0; i<numNode(); ++i) {
       --x       xd(i) = Real_t(0.0) ;
@@ -382,11 +382,11 @@ package body LULESH.Init is
       --x          nodalMass(idx) += volume / Real_t(8.0) ;
       --x       }
       --x    }
-      for elem_index in 0..this.numElem-1 loop
+      for element in 0..this.numElem-1 loop
          declare
             local_coords : NodesPerElement_Coordinate_Array;
             elemToNode   : constant NodesPerElement_Element_Index_Array :=
-              this.elements(elem_index).node_indexes;
+              this.elements(element).node_indexes;
          begin
             for node in NodesPerElement_Range loop
                local_coords(node) :=
@@ -398,8 +398,8 @@ package body LULESH.Init is
                mass_share     : constant Mass :=
                  Mass(element_volume) / Mass(NODES_PER_ELEMENT);
             begin
-               this.elements(elem_index).reference_volume := element_volume;
-               this.elements(elem_index).emass := Mass(element_volume);
+               this.elements(element).volume_reference := element_volume;
+               this.elements(element).emass := Mass(element_volume);
                for node in NodesPerElement_Range loop
                   declare
                      node_mass : Mass renames
@@ -439,7 +439,7 @@ package body LULESH.Init is
          --x    deltatime() = (Real_t(.5)*cbrt(volo(0)))/sqrt(Real_t(2.0)*einit);
          this.variables.deltatime := ART.To_Time_Span
            (Duration
-              ((0.5*cbrt(real10(this.elements(0).reference_volume)))/
+              ((0.5*cbrt(real10(this.elements(0).volume_reference)))/
                    sqrt(2.0*real10(einit))));
       end;
       --x } // End constructor
@@ -700,7 +700,7 @@ package body LULESH.Init is
          Calc_Nodes_Per_Element_Offset_For_Each_Corner;
          Check_Each_Nodes_Per_Element_Offset;
          --x     delete [] nodeElemCount ;
-         Free (nodeElemCounts);
+         Release (nodeElemCounts);
          --x   }
          --x   else {
       else

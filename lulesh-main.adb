@@ -1,8 +1,10 @@
 --- /******************************************/
 with Ada.Text_IO;
+with LULESH.Comm;
 with LULESH.Init;
 with LULESH.Util;
 with LULESH.Viz;
+with MPI;
 
 --x int main(int argc, char *argv[])
 --x {
@@ -14,16 +16,16 @@ procedure Lulesh.main is
    --x    Int_t myRank ;
    --x    struct cmdLineOpts opts;
    locDom   : Domain_Record;
-   numRanks : Rank_Type;
-   myRank   : Rank_Type;
+   numRanks : MPI.Rank_Type;
+   myRank   : MPI.Rank_Type;
    opts     : LULESH.Util.cmdLineOpts;
 
-   -- from declarations below:
-   start         : AC.Time;
-   endd          : AC.Time;
-   elapsed_time  : AC.Day_Duration;
-   elapsed_timeG : AC.Day_Duration;
-
+   --- from declarations below:
+   start         : ART.Time;
+   endd          : ART.Time;
+   elapsed_time  : ART.Time_Span;
+   elapsed_timeG : ART.Time_Span;
+   fieldData     : Domain_member;
    use type ART.Time;
 
    function Image (this : in ART.Time) return String
@@ -38,20 +40,24 @@ procedure Lulesh.main is
    function Image (this : in ART.Time_Span) return String is
       (ART.To_Duration(this)'Img);
 
-   -- #if USE_MPI
-   --    Domain_member fieldData ;
-
 begin
-   --    MPI_Init(&argc, &argv) ;
-   --    MPI_Comm_size(MPI_COMM_WORLD, &numRanks) ;
-   --    MPI_Comm_rank(MPI_COMM_WORLD, &myRank) ;
-   -- #else
+   --x #if USE_MPI
+   --x    Domain_member fieldData ;
+   --x    MPI_Init(&argc, &argv) ;
+   --x    MPI_Comm_size(MPI_COMM_WORLD, &numRanks) ;
+   --x    MPI_Comm_rank(MPI_COMM_WORLD, &myRank) ;
+   --x #else
    --x    numRanks = 1;
    --x    myRank = 0;
-   numRanks := 1;
-   myRank   := 0;
-   -- #endif
-
+   --x #endif
+   if USE_MPI then
+     MPI.Init;
+     MPI.Comm_size (MPI.COMM_WORLD, numRanks);
+     MPI.Comm_rank (MPI.COMM_WORLD, myRank);
+   else
+      numRanks := 1;
+      myRank   := 0;
+   end if;
    ---    /* Set defaults that can be overridden by command line opts */
    --x    opts.its = 9999999;
    --x    opts.nx  = 30;
@@ -72,16 +78,14 @@ begin
       viz      => False,
       balance  => 1,
       cost     => 1);
-
    --x    ParseCommandLineOptions(argc, argv, myRank, &opts);
    LULESH.Util.ParseCommandLineOptions(myRank, opts);
-
    --x    if ((myRank == 0) && (opts.quiet == 0)) {
    --x       printf("Running problem size %d^3 per domain until completion\n", opts.nx);
    --x       printf("Num processors: %d\n", numRanks);
-   -- #if _OPENMP
-   --       printf("Num threads: %d\n", omp_get_max_threads());
-   -- #endif
+   --x #if _OPENMP
+   --x       printf("Num threads: %d\n", omp_get_max_threads());
+   --x #endif
    --x       printf("Total number of elements: %lld\n\n", numRanks*opts.nx*opts.nx*opts.nx);
    --x       printf("To run other sizes, use -s <integer>.\n");
    --x       printf("To run a fixed number of iterations, use -i <integer>.\n");
@@ -94,6 +98,9 @@ begin
    if (myRank = 0 and not opts.quiet) then
       ATI.Put_Line ("Running problem size " & opts.side_length'Img & "^3 per domain until completion");
       ATI.Put_Line ("Num processors: " & numRanks'Img);
+      if USE_OMP then
+         ATI.Put_Line ("Num threads: " & omp_get_max_threads'Img);
+         end if;
       ATI.Put_Line ("Total number of elements: " &
                       Int_t'Image(Int_T(numRanks)*Int_t(opts.side_length)**3));
       ATI.Put_Line ("");
@@ -106,7 +113,6 @@ begin
       ATI.Put_Line ("See help (-h) for more options");
       ATI.Put_Line ("");
    end if;
-
    ---    // Set up the mesh and decompose. Assumes regular cubes for now
    --x    Int_t col, row, plane, side;
    declare
@@ -137,40 +143,67 @@ begin
          balance     => opts.balance,
          cost        => opts.cost);
    end;
-
-
-   -- #if USE_MPI
-   --    fieldData = &Domain::nodalMass ;
-
-   --    // Initial domain boundary communication
-   --    CommRecv(*locDom, MSG_COMM_SBN, 1,
-   --             locDom->sizeX() + 1, locDom->sizeY() + 1, locDom->sizeZ() + 1,
-   --             true, false) ;
-   --    CommSend(*locDom, MSG_COMM_SBN, 1, &fieldData,
-   --             locDom->sizeX() + 1, locDom->sizeY() + 1, locDom->sizeZ() +  1,
-   --             true, false) ;
-   --    CommSBN(*locDom, 1, &fieldData) ;
-
-   --    // End initialization
-   --    MPI_Barrier(MPI_COMM_WORLD);
-   -- #endif
-
-   --    // BEGIN timestep to solution */
-   -- #if USE_MPI
-   --    start = MPI_Wtime();
-   -- #else
+   --x #if USE_MPI
+   --x    fieldData = &Domain::nodalMass ;
+   --x    // Initial domain boundary communication
+   --x    CommRecv(*locDom, MSG_COMM_SBN, 1,
+   --x             locDom->sizeX() + 1, locDom->sizeY() + 1, locDom->sizeZ() + 1,
+   --x             true, false) ;
+   --x    CommSend(*locDom, MSG_COMM_SBN, 1, &fieldData,
+   --x             locDom->sizeX() + 1, locDom->sizeY() + 1, locDom->sizeZ() +  1,
+   --x             true, false) ;
+   --x    CommSBN(*locDom, 1, &fieldData) ;
+   --x    // End initialization
+   --x    MPI_Barrier(MPI_COMM_WORLD);
+   --x #endif
+   if USE_MPI then
+      --!! pointer to the array of all masses??
+     fieldData := Domain.nodalMass ;
+     --- // Initial domain boundary communication
+      LULESH.Comm.CommRecv
+        (domain     => locDom,
+         msgType    => MSG_COMM_SBN,
+         xferFields => 1,
+         dx         => locDom.parameters.size(X) + 1,
+         dy         => locDom.parameters.size(Y) + 1,
+         dz         => locDom.parameters.size(Z) + 1,
+         doRecv     => true,
+         planeOnly  => false);
+      LULESH.Comm.CommSend
+        (domain     => locDom,
+         msgType    => MSG_COMM_SBN,
+         xferFields => 1,
+         fieldData  => fieldData,
+         dx         => locDom.parameters.size(X) + 1,
+         dy         => locDom.parameters.size(Y) + 1,
+         dz         => locDom.parameters.size(Z) + 1,
+         doSend     => true,
+         planeOnly  => false);
+      LULESH.Comm.CommSBN
+        (domain     => locDom,
+         xferFields => 1,
+         fieldData  => fieldData);
+     --- // End initialization
+     MPI.Barrier (MPI.COMM_WORLD);
+   end if;
+   ---    // BEGIN timestep to solution */
+   --x #if USE_MPI
+   --x    start = MPI_Wtime();
+   --x #else
    --x    timeval start;
    --x    gettimeofday(&start, NULL) ;
-   -- #endif
-   start := Ada.Calendar.Clock;
+   --x #endif
+   if USE_MPI then
+      start := MPI.Wtime;
+   else
+      start := ART.Clock;
+   end if;
    --- //debug to see region sizes
    --- //   for(Int_t i = 0; i < locDom->numReg(); i++)
    --- //      std::cout << "region" << i + 1<< "size" << locDom->regElemSize(i) <<std::endl;
    ---    while((locDom->time() < locDom->stoptime()) && (locDom->cycle() < opts.its)) {
-
    --x       TimeIncrement(*locDom) ;
    --x       LagrangeLeapFrog(*locDom) ;
-
    --x       if ((opts.showProg != 0) && (opts.quiet == 0) && (myRank == 0)) {
    --x          printf("cycle = %d, time = %e, dt=%e\n",
    --x                 locDom->cycle(), double(locDom->time()), double(locDom->deltatime()) ) ;
@@ -188,39 +221,51 @@ begin
                        & ", dt = " & Image(locDom.variables.deltatime));
       end if;
    end loop;
-
-   --    // Use reduced max elapsed time
-   --    double elapsed_time;
-   -- #if USE_MPI
-   --    elapsed_time = MPI_Wtime() - start;
-   -- #else
+   ---    // Use reduced max elapsed time
+   --x    double elapsed_time;
+   --x #if USE_MPI
+   --x    elapsed_time = MPI_Wtime() - start;
+   --x #else
    --x    timeval end;
    --x    gettimeofday(&end, NULL) ;
    --x    elapsed_time = (double)(end.tv_sec - start.tv_sec) + ((double)(end.tv_usec - start.tv_usec))/1000000 ;
-   endd := AC.Clock;
-   elapsed_time := AC."-" (endd, start);
-   -- #endif
+   --x #endif
+   if USE_MPI then
+      elapsed_time := MPI.Wtime - start;
+   else
+      endd := ART.Clock;
+      elapsed_time := endd - start;
+   end if;
    --x    double elapsed_timeG;
-   -- #if USE_MPI
-   --    MPI_Reduce(&elapsed_time, &elapsed_timeG, 1, MPI_DOUBLE,
-   --               MPI_MAX, 0, MPI_COMM_WORLD);
-   -- #else
+   --x #if USE_MPI
+   --x    MPI_Reduce(&elapsed_time, &elapsed_timeG, 1, MPI_DOUBLE,
+   --x               MPI_MAX, 0, MPI_COMM_WORLD);
+   --x #else
    --x    elapsed_timeG = elapsed_time;
-   elapsed_timeG := elapsed_time;
-   -- #endif
-
+   --x #endif
+   if USE_MPI then
+      MPI.Reduce
+        (sendbuf  => elapsed_time'Address,
+         recvbuf  => elapsed_timeG'Address,
+         count    => 1,
+         datatype => MPI.DOUBLE,
+         op       => MPI.MAX,
+         root     => 0,
+         comm     => MPI.COMM_WORLD);
+   else
+      elapsed_timeG := elapsed_time;
+   end if;
    ---    // Write out final viz file */
    --x    if (opts.viz) {
    --x       DumpToVisit(*locDom, opts.numFiles, myRank, numRanks) ;
    --x    }
    if opts.viz then
       LULESH.Viz.DumpToVisit
-        (domainn  => locDom,
+        (domain  => locDom,
          numfiles => opts.numFiles,
          myRank   => myRank,
          numRanks => numRanks);
    end if;
-
    --x    if ((myRank == 0) && (opts.quiet == 0)) {
    --x       VerifyAndWriteFinalOutput(elapsed_timeG, *locDom, opts.nx, numRanks);
    --x    }
@@ -228,11 +273,12 @@ begin
       LULESH.Util.VerifyAndWriteFinalOutput
         (elapsed_timeG, locDom, opts.side_length, numRanks);
    end if;
-
-   -- #if USE_MPI
-   --    MPI_Finalize() ;
-   -- #endif
-
+   --x #if USE_MPI
+   --x    MPI_Finalize() ;
+   --x #endif
+   if USE_MPI then
+     MPI.Finalize;
+   end if;
    --x    return 0 ;
    --x }
 end LULESH.main;

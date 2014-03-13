@@ -11,7 +11,7 @@ procedure Test_Optimization is
       Positive range <>,
       Positive range <>) of Value_Type;
    type Value_Matrix_Access is access Value_Matrix;
-   procedure Free is new Unchecked_Deallocation
+   procedure Release is new Unchecked_Deallocation
      (Object => Value_Matrix,
       Name   => Value_Matrix_Access);
 
@@ -41,7 +41,7 @@ procedure Test_Optimization is
       ATI.Put_line ("Elapsed time:" & Elapsed'Img);
       Time_Per_Capita := Float(Elapsed) / Float (Iterations);
       ATI.Put_line ("Time per element:" & Time_Per_Capita'Img);
-      Free (Values);
+      Release (Values);
    end Test_Matrix;
 
 begin

@@ -1,11 +1,10 @@
 with Ada.Calendar;
-with Ada.Containers.Vectors;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Numerics.Generic_Real_Arrays;
 with Ada.Real_Time;
 with Ada.Unchecked_Deallocation;
-
 with Interfaces;
+with MPI;
 
 package LULESH is
 
@@ -19,7 +18,6 @@ package LULESH is
    --- # error "You should specify USE_MPI=0 or USE_MPI=1 on the compile line"
    --- #endif
    USE_MPI : constant Boolean := False;
-
 
    --- // OpenMP will be compiled in if this flag is set to 1 AND the compiler beging
    --- // used supports it (i.e. the _OPENMP symbol is defined)
@@ -74,9 +72,8 @@ package LULESH is
    type Region_Index  is new Index_Type;
    type Thread_Index  is new Index_Type;
 
-   type Rank_Type              is new Natural;
-   subtype Process_ID_Type     is Rank_Type;
-   subtype Rank_Count_Range    is Rank_Type range 1..Rank_Type'Last;
+   subtype Process_ID_Type     is MPI.Rank_Type;
+   subtype Rank_Count_Range    is MPI.Rank_Type range 1..MPI.Rank_Type'Last;
    subtype Process_Count_Range is Rank_Count_Range;
 
    --- Looking down on element:
@@ -92,6 +89,12 @@ package LULESH is
 
    type Real_Array is array (Index_Type range <>) of Real_Type;
    --     type Real_Array_Access is access Real_Array;
+   type Element_Real_Array is array (Element_Index range <>)
+     of Real_Type;
+   type Element_Real_Array_Access is access Element_Real_Array;
+   procedure Release is new Ada.Unchecked_Deallocation
+     (Element_Real_Array, Element_Real_Array_Access);
+
    type Index_Array is array (Index_Type range <>) of Index_Type;
    type Element_Element_Index_Array is array (Element_Index range <>)
      of Element_Index;
@@ -103,6 +106,8 @@ package LULESH is
    type Node_Element_Index_Array is array (Node_Index range <>)
      of Element_Index;
    type Node_Element_Index_Array_Access is access Node_Element_Index_Array;
+   procedure Release is new Ada.Unchecked_Deallocation
+     (Node_Element_Index_Array, Node_Element_Index_Array_Access);
 
    type Region_Bin_End_Array is array (Region_Index range <>)
      of Cost_Type;
@@ -348,6 +353,7 @@ package LULESH is
    subtype Velocity     is Meters_Per_Second;
    subtype Volume       is Cubic_Meters;
    
+   type Compression_Type is new Real_Type;
    type Derivative_Type  is new Real_Type;
    type Determinant_Type is new Real_Type;
    type Gradient_Type    is new Real_Type;
@@ -403,7 +409,7 @@ package LULESH is
      (Element_Index range <>) of Pressure_Vector;
    type Element_Pressure_Vector_Array_Access is access
      Element_Pressure_Vector_Array;
-   procedure Free is new Ada.Unchecked_Deallocation
+   procedure Release is new Ada.Unchecked_Deallocation
      (Element_Pressure_Vector_Array, Element_Pressure_Vector_Array_Access);
 
    type Element_NodesPerElement_Force_Vector_Array_Array is array
@@ -420,18 +426,35 @@ package LULESH is
      array (Cartesian_Axes, Natural_Axes) of Real_Type;
    
    --- 0..2**Cartesian_Axes'Length-1?
+   --- 0..NODES_PER_ELEMENT-1?
    type Derivatives_Range is new Index_Type range 0..7;
    type Derivative_Cartesian_Real_Array is 
      array (Derivatives_Range, Cartesian_Axes) of Real_Type;
    --     type Derivative_Array is array (Derivatives_Range) of C_Coordinate_Vector;
+   
+   type Element_Compression_Array is array (Element_Index range <>) of Compression_Type;
+   type Element_Compression_Array_Access is access Element_Compression_Array;
+   procedure Release is new Ada.Unchecked_Deallocation
+     (Element_Compression_Array, Element_Compression_Array_Access);
+   
    type Element_Determinant_Array is array (Element_Index range <>) of Determinant_Type;
    type Element_Determinant_Array_Access is access Element_Determinant_Array;
-   procedure Free is new Ada.Unchecked_Deallocation
+   procedure Release is new Ada.Unchecked_Deallocation
      (Element_Determinant_Array, Element_Determinant_Array_Access);
+   
+   type Element_Energy_Array is array (Element_Index range <>) of Energy;
+   type Element_Energy_Array_Access is access Element_Energy_Array;
+   procedure Release is new Ada.Unchecked_Deallocation
+     (Element_Energy_Array, Element_Energy_Array_Access);
+   
+   type Element_Pressure_Array is array (Element_Index range <>) of Pressure;
+   type Element_Pressure_Array_Access is access Element_Pressure_Array;
+   procedure Release is new Ada.Unchecked_Deallocation
+     (Element_Pressure_Array, Element_Pressure_Array_Access);
    
    type Element_Volume_Array is array (Element_Index range <>) of Volume;
    type Element_Volume_Array_Access is access Element_Volume_Array;
-   procedure Free is new Ada.Unchecked_Deallocation
+   procedure Release is new Ada.Unchecked_Deallocation
      (Element_Volume_Array, Element_Volume_Array_Access);
    
    type Node_Volume_Array is array (Node_Index range <>) of Volume;
@@ -505,20 +528,20 @@ package LULESH is
       --x    std::vector<Real_t> m_q ;   /* q */
       --x    std::vector<Real_t> m_ql ;  /* linear term for q */
       --x    std::vector<Real_t> m_qq ;  /* quadratic term for q */
-      static_pressure            : Pressure;
-      dynamic_pressure           : Pressure;
-      dynamic_pressure_linear    : Pressure;
-      dynamic_pressure_quadratic : Pressure;
+      pressure_static            : Pressure;
+      pressure_dynamic           : Pressure;
+      pressure_dynamic_linear    : Pressure;
+      pressure_dynamic_quadratic : Pressure;
 --        stress_integrated          : Force_Vector;
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
       --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
       --x    std::vector<Real_t> m_delv ;  /* m_vnew - m_v */
       --x    std::vector<Real_t> m_vdov ;  /* volume derivative over volume */
-      relative_volume               : Volume;
-      reference_volume              : Volume;
-      new_relative_volume           : Volume;
-      new_relative_volume_delta     : Volume;
+      volume_relative               : Volume;
+      volume_reference              : Volume;
+      new_volume_relative           : Volume;
+      new_volume_relative_delta     : Volume;
       volume_derivative_over_volume : VDOV_Type;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
       characteristic_length : Length;
@@ -614,8 +637,8 @@ package LULESH is
       ---    const Real_t  m_u_cut ;             // velocity tolerance
       energy_tolerance           : Energy;
       pressure_tolerance         : Pressure;
-      dynamic_pressure_tolerance : Pressure;
-      relative_volume_tolerance  : Volume;
+      pressure_dynamic_tolerance : Pressure;
+      volume_relative_tolerance  : Volume;
       velocity_tolerance         : Velocity;
 
       ---    // Other constants (usually setable, but hardcoded in this proxy app)

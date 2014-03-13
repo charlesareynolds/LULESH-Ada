@@ -1,3 +1,4 @@
+with LULESH.Comm;
 --- /*
 ---   This is a Version 2.0 MPI + OpenMP Beta implementation of LULESH
 
@@ -160,7 +161,6 @@
 -- # include <omp.h>
 -- #endif
 
-with Ada.Unchecked_Deallocation;
 
 package body LULESH is
 
@@ -226,7 +226,7 @@ package body LULESH is
          --x       Real_t newdt ;
          declare
             ratio  : Real_Type;
-            olddt  : Time_Span := domain.variables.deltatime;
+            olddt  : constant Time_Span := domain.variables.deltatime;
             gnewdt : Time_Span := Time_Span_Last;
             newdt  : Time_Span;
          begin
@@ -351,8 +351,8 @@ package body LULESH is
       for element in domain.elements'Range loop
          stress_integrated(element) :=
            (others =>
-              - domain.elements(element).static_pressure
-              - domain.elements(element).dynamic_pressure);
+              - domain.elements(element).pressure_static
+              - domain.elements(element).pressure_dynamic);
       end loop;
       --x }
    end InitStressTermsForElems;
@@ -455,11 +455,11 @@ package body LULESH is
          --x   cjzxi =    (fjxet * fjyze) - (fjyet * fjxze);
          --x   cjzet =  - (fjxxi * fjyze) + (fjyxi * fjxze);
          --x   cjzze =    (fjxxi * fjyet) - (fjyxi * fjxet);
-         --- Order of cjzet components reversed for visual consistency:
+         --- Order of cjzet components reversed below for visual consistency:
          cj(Z,Xi)   := (fj(X,Eta)  * fj(Y,Zeta)) - (fj(Y,Eta)  * fj(X,Zeta));
          cj(Z,Eta)  := (fj(X,Zeta) * fj(Y,Xi))   - (fj(Y,Zeta) * fj(X,Xi));
          cj(Z,Zeta) := (fj(X,Xi)   * fj(Y,Eta))  - (fj(Y,Xi)   * fj(X,Eta));
-         end Compute_Cofactors;
+      end Compute_Cofactors;
 
       ---   /* calculate partials :
       ---      this need only be done for l = 0,1,2,3   since , by symmetry ,
@@ -733,7 +733,7 @@ package body LULESH is
       --    Index_t numthreads = omp_get_max_threads();
       -- #else
       --t    Index_t numthreads = 1;
-      numthreads : Index_Type := 1;
+      numthreads : constant Index_Type := 1;
       -- #endif
 
       --x    Index_t numElem8 = numElem * 8 ;
@@ -814,10 +814,10 @@ package body LULESH is
                --     }
                --     else {
             else
-               --        SumElemStressesToNodeForces( B, sigxx[k], sigyy[k], sigzz[k],
-               --                                     fx_local, fy_local, fz_local ) ;
+               -- x       SumElemStressesToNodeForces( B, sigxx[k], sigyy[k], sigzz[k],
+               -- x                                    fx_local, fy_local, fz_local ) ;
                SumElemStressesToNodeForces
-                 (node_areas          => B,
+                 (node_areas     => B,
                   element_stress => stress_integrated (element),
                   node_forces    => local_nodes_forces);
 
@@ -907,7 +907,7 @@ package body LULESH is
    --    *dvdx *= twelfth;
    --    *dvdy *= twelfth;
    --    *dvdz *= twelfth;
-
+      pragma Warnings (Off, "unary minus expression should be parenthesized here");
       dvd(X) := twelfth *
         (+ (fc(1)(y) + fc(2)(y)) * (fc(0)(z) + fc(1)(z))
          - (fc(0)(y) + fc(1)(y)) * (fc(1)(z) + fc(2)(z))
@@ -929,7 +929,7 @@ package body LULESH is
          + (fc(3)(y) + fc(4)(y)) * (fc(0)(x) + fc(4)(x))
          + (fc(2)(y) + fc(5)(y)) * (fc(3)(x) + fc(5)(x))
          - (fc(3)(y) + fc(5)(y)) * (fc(2)(x) + fc(5)(x)));
-
+      pragma Warnings (On, "unary minus expression should be parenthesized here");
    -- }
    end VoluDer;
 
@@ -1427,14 +1427,14 @@ package body LULESH is
             end loop;
 
             --x       CalcHourglassControlForElems(domain, determ, hgcoef) ;
-            CalcHourglassControlForElems(domain, determinants, hgcoef) ;
+            CalcHourglassControlForElems(domain, determinants, hgcoef);
 
             --x       Release(&determ) ;
             --x       Release(&sigzz) ;
             --x       Release(&sigyy) ;
             --x       Release(&sigxx) ;
-            Free (determinants);
-            Free (stress_integrated);
+            Release (determinants);
+            Release (stress_integrated);
          end;
          --x    }
       end if;
@@ -1626,6 +1626,34 @@ package body LULESH is
       --x   return;
       --x }
    end LagrangeNodal;
+
+   --- /******************************************/
+
+   type EOS_Info_Record (numElem : Element_Count) is record
+      bvc          : Element_Real_Array_Access := new Element_Real_Array (0..numElem);
+      compHalfStep : Element_Compression_Array_Access := new Element_Compression_Array (0..numElem);
+      compression  : Element_Compression_Array_Access := new Element_Compression_Array (0..numElem);
+      delvc        : Element_Volume_Array_Access := new Element_Volume_Array (0..numElem);
+      e_cut        : Energy;
+      e_new        : Element_Energy_Array_Access := new Element_Energy_Array (0..numElem);
+      e_old        : Element_Energy_Array_Access := new Element_Energy_Array (0..numElem);
+      emin         : Energy;
+      eosvmax      : Volume;
+      eosvmin      : Volume;
+      p_cut        : Pressure;
+      p_new        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElem);
+      p_old        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElem);
+      pbvc         : Element_Real_Array_Access := new Element_Real_Array (0..numElem);
+      pmin         : Pressure;
+      q_cut        : Pressure;
+      q_new        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElem);
+      q_old        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElem);
+      ql_old       : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElem);
+      qq_old       : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElem);
+      rho0         : Density;
+      ss4o3        : Real_Type;
+      work         : Element_Real_Array_Access := new Element_Real_Array (0..numElem);
+   end record;
 
    -- /******************************************/
 
@@ -2385,7 +2413,7 @@ package body LULESH is
    --    }
    -- }
 
-   -- /******************************************/
+   --- /******************************************/
 
    -- static inline
    -- void CalcEnergyForElems(Real_t* p_new, Real_t* e_new, Real_t* q_new,
@@ -2399,8 +2427,41 @@ package body LULESH is
    --                         Real_t eosvmax,
    --                         Index_t length, Index_t *regElemList)
    -- {
+   procedure CalcEnergyForElems
+     (domain      : in out Domain_Record;
+      vnewc       : access Element_Volume_Array;
+      info        : in EOS_Info_Record;
+      regElemList : access Element_Element_Index_Array)
+    --       (domain      : in out Domain_Record;
+--        p_new   : access Element_Pressure_Array;
+--        e_new : access Element_Energy_Array;
+--         q_new : access Element_Pressure_Array;
+--        bvc: access Element_Real_Array;
+--        pbvc: access Element_Real_Array;
+--       p_old : access Element_Pressure_Array;
+--         e_old: access Element_Energy_Array;
+--         q_old : access Element_Pressure_Array;
+--        Real_t* compression : access Element_Compression_Array;
+--        Real_t* compHalfStep,
+--         vnewc : access Element_Volume_Array;
+--        Real_t* work,
+--        Real_t* delvc,
+--        Real_t* qq_old,
+--        Real_t* ql_old,
+--        Index_t length,
+--        regElemList : access Element_Element_Index_Array)
+   with inline
+   is
+--        Real_t pmin,
+--        Real_t p_cut,
+--        Real_t  e_cut,
+--        Real_t q_cut,
+--        Real_t emin,
+--        rho0        : in Density;
+--        Real_t eosvmax,
    --    Real_t *pHalfStep = Allocate<Real_t>(length) ;
-
+   begin
+null;
    -- #pragma omp parallel for firstprivate(length, emin)
    --    for (Index_t i = 0 ; i < length ; ++i) {
    --       e_new[i] = e_old[i] - Real_t(0.5) * delvc[i] * (p_old[i] + q_old[i])
@@ -2514,161 +2575,293 @@ package body LULESH is
 
    --    Release(&pHalfStep) ;
 
-   --    return ;
-   -- }
-
-   -- /******************************************/
-
-   -- static inline
-   -- void CalcSoundSpeedForElems(Domain &domain,
-   --                             Real_t *vnewc, Real_t rho0, Real_t *enewc,
-   --                             Real_t *pnewc, Real_t *pbvc,
-   --                             Real_t *bvc, Real_t ss4o3,
-   --                             Index_t len, Index_t *regElemList)
-   -- {
-   -- #pragma omp parallel for firstprivate(rho0, ss4o3)
-   --    for (Index_t i = 0; i < len ; ++i) {
-   --       Index_t elem = regElemList[i];
-   --       Real_t ssTmp = (pbvc[i] * enewc[i] + vnewc[elem] * vnewc[elem] *
-   --                  bvc[i] * pnewc[i]) / rho0;
-   --       if (ssTmp <= Real_t(.1111111e-36)) {
-   --          ssTmp = Real_t(.3333333e-18);
-   --       }
-   --       else {
-   --          ssTmp = SQRT(ssTmp);
-   --       }
-   --       domain.ss(elem) = ssTmp ;
-   --    }
-   -- }
-
-   -- /******************************************/
-
-   -- static inline
-   -- void EvalEOSForElems(Domain& domain, Real_t *vnewc,
-   --                      Int_t numElemReg, Index_t *regElemList, Int_t rep)
-   -- {
-   --    Real_t  e_cut = domain.e_cut() ;
-   --    Real_t  p_cut = domain.p_cut() ;
-   --    Real_t  ss4o3 = domain.ss4o3() ;
-   --    Real_t  q_cut = domain.q_cut() ;
-
-   --    Real_t eosvmax = domain.eosvmax() ;
-   --    Real_t eosvmin = domain.eosvmin() ;
-   --    Real_t pmin    = domain.pmin() ;
-   --    Real_t emin    = domain.emin() ;
-   --    Real_t rho0    = domain.refdens() ;
-
-   --    // These temporaries will be of different size for
-   --    // each call (due to different sized region element
-   --    // lists)
-   --    Real_t *e_old = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *delvc = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *p_old = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *q_old = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *compression = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *compHalfStep = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *qq_old = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *ql_old = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *work = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *p_new = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *e_new = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *q_new = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *bvc = Allocate<Real_t>(numElemReg) ;
-   --    Real_t *pbvc = Allocate<Real_t>(numElemReg) ;
-
-   --    //loop to add load imbalance based on region number
-   --    for(Int_t j = 0; j < rep; j++) {
-   --       /* compress data, minimal set */
-   -- #pragma omp parallel
-   --       {
-   -- #pragma omp for nowait firstprivate(numElemReg)
-   --          for (Index_t i=0; i<numElemReg; ++i) {
-   --             Index_t elem = regElemList[i];
-   --             e_old[i] = domain.e(elem) ;
-   --             delvc[i] = domain.delv(elem) ;
-   --             p_old[i] = domain.p(elem) ;
-   --             q_old[i] = domain.q(elem) ;
-   --             qq_old[i] = domain.qq(elem) ;
-   --             ql_old[i] = domain.ql(elem) ;
-   --          }
-
-   -- #pragma omp for firstprivate(numElemReg)
-   --          for (Index_t i = 0; i < numElemReg ; ++i) {
-   --             Index_t elem = regElemList[i];
-   --             Real_t vchalf ;
-   --             compression[i] = Real_t(1.) / vnewc[elem] - Real_t(1.);
-   --             vchalf = vnewc[elem] - delvc[i] * Real_t(.5);
-   --             compHalfStep[i] = Real_t(1.) / vchalf - Real_t(1.);
-   --          }
-
-   --       /* Check for v > eosvmax or v < eosvmin */
-   --          if ( eosvmin != Real_t(0.) ) {
-   -- #pragma omp for nowait firstprivate(numElemReg, eosvmin)
-   --             for(Index_t i=0 ; i<numElemReg ; ++i) {
-   --                Index_t elem = regElemList[i];
-   --                if (vnewc[elem] <= eosvmin) { /* impossible due to calling func? */
-   --                   compHalfStep[i] = compression[i] ;
-   --                }
-   --             }
-   --          }
-   --          if ( eosvmax != Real_t(0.) ) {
-   -- #pragma omp for nowait firstprivate(numElemReg, eosvmax)
-   --             for(Index_t i=0 ; i<numElemReg ; ++i) {
-   --                Index_t elem = regElemList[i];
-   --                if (vnewc[elem] >= eosvmax) { /* impossible due to calling func? */
-   --                   p_old[i]        = Real_t(0.) ;
-   --                   compression[i]  = Real_t(0.) ;
-   --                   compHalfStep[i] = Real_t(0.) ;
-   --                }
-   --             }
-   --          }
-
-   -- #pragma omp for nowait firstprivate(numElemReg)
-   --          for (Index_t i = 0 ; i < numElemReg ; ++i) {
-   --             work[i] = Real_t(0.) ;
-   --          }
-   --       }
-   --       CalcEnergyForElems(p_new, e_new, q_new, bvc, pbvc,
-   --                          p_old, e_old,  q_old, compression, compHalfStep,
-   --                          vnewc, work,  delvc, pmin,
-   --                          p_cut, e_cut, q_cut, emin,
-   --                          qq_old, ql_old, rho0, eosvmax,
-   --                          numElemReg, regElemList);
-   --    }
-
-   -- #pragma omp parallel for firstprivate(numElemReg)
-   --    for (Index_t i=0; i<numElemReg; ++i) {
-   --       Index_t elem = regElemList[i];
-   --       domain.p(elem) = p_new[i] ;
-   --       domain.e(elem) = e_new[i] ;
-   --       domain.q(elem) = q_new[i] ;
-   --    }
-
-   --    CalcSoundSpeedForElems(domain,
-   --                           vnewc, rho0, e_new, p_new,
-   --                           pbvc, bvc, ss4o3,
-   --                           numElemReg, regElemList) ;
-
-   --    Release(&pbvc) ;
-   --    Release(&bvc) ;
-   --    Release(&q_new) ;
-   --    Release(&e_new) ;
-   --    Release(&p_new) ;
-   --    Release(&work) ;
-   --    Release(&ql_old) ;
-   --    Release(&qq_old) ;
-   --    Release(&compHalfStep) ;
-   --    Release(&compression) ;
-   --    Release(&q_old) ;
-   --    Release(&p_old) ;
-   --    Release(&delvc) ;
-   --    Release(&e_old) ;
-   -- }
+   --x    return ;
+   --x }
+   end CalcEnergyForElems;
 
    --- /******************************************/
 
-   -- static inline
-   -- void ApplyMaterialPropertiesForElems(Domain& domain, Real_t vnew[])
+   --x static inline
+   --x void CalcSoundSpeedForElems(Domain &domain,
+   --x                             Real_t *vnewc, Real_t rho0, Real_t *enewc,
+   --x                             Real_t *pnewc, Real_t *pbvc,
+   --x                             Real_t *bvc, Real_t ss4o3,
+   --x                             Index_t len, Index_t *regElemList)
+   --x {
+   procedure CalcSoundSpeedForElems
+     (domain      : in out Domain_Record;
+      vnewc       : access Element_Volume_Array;
+      rho0        : in Density;
+      enewc       : access Element_Energy_Array;
+      pnewc       : access Element_Pressure_Array;
+      pbvc        : access Element_Real_Array;
+      bvc         : access Element_Real_Array;
+      ss4o3       : in Real_Type;
+      regElemList : access Element_Element_Index_Array)
+     with inline is
+   begin
+   -- #pragma omp parallel for firstprivate(rho0, ss4o3)
+   --x    for (Index_t i = 0; i < len ; ++i) {
+   --x       Index_t elem = regElemList[i];
+   --x       Real_t ssTmp = (pbvc[i] * enewc[i] + vnewc[elem] * vnewc[elem] *
+   --x                  bvc[i] * pnewc[i]) / rho0;
+   --x       if (ssTmp <= Real_t(.1111111e-36)) {
+   --x          ssTmp = Real_t(.3333333e-18);
+   --x       }
+   --x       else {
+   --x          ssTmp = SQRT(ssTmp);
+   --x       }
+   --x       domain.ss(elem) = ssTmp ;
+   --x    }
+      for region_element in regElemList'Range loop
+         declare
+            element : constant Element_Index := regElemList(region_element);
+            ssTmp : Real_Type :=
+              (pbvc(region_element) * Real_Type(enewc(region_element)) +
+                   Real_Type(vnewc(element))**2 * bvc(region_element) *
+                   Real_Type(pnewc(region_element))) /
+                Real_Type(rho0);
+         begin
+            if ssTmp <= 0.1111111e-36 then
+               ssTmp := 0.3333333e-18;
+            else
+               ssTmp := SQRT(ssTmp);
+            end if;
+            domain.elements(element).sound_speed := Velocity (ssTmp);
+         end;
+     end loop;
+   --x }
+   end CalcSoundSpeedForElems;
+
+   --x static inline
+   --x void EvalEOSForElems(Domain& domain, Real_t *vnewc,
+   --x                      Int_t numElemReg, Index_t *regElemList, Int_t rep)
+   --x {
+   procedure EvalEOSForElems
+     (domain      : in out Domain_Record;
+      vnewc       : access Element_Volume_Array;
+      numElemReg  : in     Element_Count;
+      regElemList : access Element_Element_Index_Array;
+      rep         : in     Cost_Type)
+     with Inline
+   is
+      --x    Real_t  e_cut = domain.e_cut() ;
+      --x    Real_t  p_cut = domain.p_cut() ;
+      --x    Real_t  ss4o3 = domain.ss4o3() ;
+      --x    Real_t  q_cut = domain.q_cut() ;
+--        e_cut : constant Energy    := domain.parameters.energy_tolerance;
+--        p_cut : constant Pressure  := domain.parameters.pressure_tolerance;
+--        ss4o3 : constant Real_Type := domain.parameters.four_thirds;
+--        q_cut : constant Pressure  := domain.parameters.pressure_dynamic_tolerance;
+      --x    Real_t eosvmax = domain.eosvmax() ;
+      --x    Real_t eosvmin = domain.eosvmin() ;
+      --x    Real_t pmin    = domain.pmin() ;
+      --x    Real_t emin    = domain.emin() ;
+      --x    Real_t rho0    = domain.refdens() ;
+--        eosvmax : constant Volume   := domain.parameters.eosvmax;
+--        eosvmin : constant Volume   := domain.parameters.eosvmin;
+--        pmin    : constant Pressure := domain.parameters.pressure_floor;
+--        emin    : constant Energy   := domain.parameters.energy_floor;
+--        rho0    : constant Density  := domain.parameters.reference_density;
+      ---    // These temporaries will be of different size for
+      ---    // each call (due to different sized region element
+      ---    // lists)
+      --x    Real_t *e_old = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *delvc = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *p_old = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *q_old = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *compression = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *compHalfStep = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *qq_old = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *ql_old = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *work = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *p_new = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *e_new = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *q_new = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *bvc = Allocate<Real_t>(numElemReg) ;
+      --x    Real_t *pbvc = Allocate<Real_t>(numElemReg) ;
+--        bvc          : Element_Real_Array_Access := new Element_Real_Array (0..numElemReg);
+--        compHalfStep : Element_Compression_Array_Access := new Element_Compression_Array (0..numElemReg);
+--        compression  : Element_Compression_Array_Access := new Element_Compression_Array (0..numElemReg);
+--        delvc        : Element_Volume_Array_Access := new Element_Volume_Array (0..numElemReg);
+--        e_new        : Element_Energy_Array_Access := new Element_Energy_Array (0..numElemReg);
+--        e_old        : Element_Energy_Array_Access := new Element_Energy_Array (0..numElemReg);
+--        p_new        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElemReg);
+--        p_old        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElemReg);
+--        pbvc         : Element_Real_Array_Access := new Element_Real_Array (0..numElemReg);
+--        q_new        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElemReg);
+--        q_old        : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElemReg);
+--        ql_old       : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElemReg);
+--        qq_old       : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElemReg);
+--        work         : Element_Real_Array_Access := new Element_Real_Array (0..numElemReg);
+
+      info : EOS_Info_Record (numElemReg);
+   begin
+      ---    //loop to add load imbalance based on region number
+      --x    for(Int_t j = 0; j < rep; j++) {
+      for j in 0..rep-1 loop
+         ---       /* compress data, minimal set */
+         -- #pragma omp parallel
+         --       {
+         -- #pragma omp for nowait firstprivate(numElemReg)
+         --x          for (Index_t i=0; i<numElemReg; ++i) {
+         --x             Index_t elem = regElemList[i];
+         --x             e_old[i] = domain.e(elem) ;
+         --x             delvc[i] = domain.delv(elem) ;
+         --x             p_old[i] = domain.p(elem) ;
+         --x             q_old[i] = domain.q(elem) ;
+         --x             qq_old[i] = domain.qq(elem) ;
+         --x             ql_old[i] = domain.ql(elem) ;
+         --x          }
+         for region_element in regElemList'Range loop
+            declare
+               element : Element_Record renames
+                 domain.elements (regElemList (region_element));
+            begin
+              info.e_old(region_element)  := element.eenergy;
+              info.delvc(region_element)  := element.new_volume_relative_delta;
+              info.p_old(region_element)  := element.pressure_static;
+              info.q_old(region_element)  := element.pressure_dynamic;
+              info.qq_old(region_element) := element.pressure_dynamic_quadratic;
+              info.ql_old(region_element) := element.pressure_dynamic_linear;
+            end;
+         end loop;
+
+         -- #pragma omp for firstprivate(numElemReg)
+         --x          for (Index_t i = 0; i < numElemReg ; ++i) {
+         --x             Index_t elem = regElemList[i];
+         --x             Real_t vchalf ;
+         --x             compression[i] = Real_t(1.) / vnewc[elem] - Real_t(1.);
+         --x             vchalf = vnewc[elem] - delvc[i] * Real_t(.5);
+         --x             compHalfStep[i] = Real_t(1.) / vchalf - Real_t(1.);
+         --x          }
+         for region_element in regElemList'Range loop
+            declare
+               element : constant Element_Index := regElemList (region_element);
+               vchalf  : Volume;
+               function To_Compression (this : in Volume) return Compression_Type is
+                  (Compression_Type(1.0 / vnewc(element) - 1.0));
+            begin
+              info.compression(region_element) := To_Compression(vnewc(element));
+              vchalf := vnewc(element) - info.delvc(region_element) * 0.5;
+              info.compHalfStep(region_element) := To_Compression(vchalf);
+            end;
+         end loop;
+         ---       /* Check for v > eosvmax or v < eosvmin */
+         --x          if ( eosvmin != Real_t(0.) ) {
+         -- #pragma omp for nowait firstprivate(numElemReg, eosvmin)
+         --x             for(Index_t i=0 ; i<numElemReg ; ++i) {
+         --x                Index_t elem = regElemList[i];
+         --x                if (vnewc[elem] <= eosvmin) { /* impossible due to calling func? */
+         --x                   compHalfStep[i] = compression[i] ;
+         --x                }
+         --x             }
+         --x          }
+         --x          if ( eosvmax != Real_t(0.) ) {
+         -- #pragma omp for nowait firstprivate(numElemReg, eosvmax)
+         --x             for(Index_t i=0 ; i<numElemReg ; ++i) {
+         --x                Index_t elem = regElemList[i];
+         --x                if (vnewc[elem] >= eosvmax) { /* impossible due to calling func? */
+         --x                   p_old[i]        = Real_t(0.) ;
+         --x                   compression[i]  = Real_t(0.) ;
+         --x                   compHalfStep[i] = Real_t(0.) ;
+         --x                }
+         --x             }
+         --x          }
+         if info.eosvmin /= 0.0 then
+            for region_element in regElemList'Range loop
+               if vnewc(regElemList(region_element))  <= info.eosvmin then ---/* impossible due to calling func? */
+                    info.compHalfStep(region_element) := info.compression(region_element);
+               end if;
+            end loop;
+         end if;
+         if info.eosvmax /= 0.0 then
+            for region_element in regElemList'Range loop
+               if vnewc(regElemList(region_element)) >= info.eosvmax then ---/* impossible due to calling func? */
+                  info.p_old(region_element)        := 0.0;
+                  info.compression(region_element)  := 0.0;
+                  info.compHalfStep(region_element) := 0.0;
+               end if;
+            end loop;
+         end if;
+
+         -- #pragma omp for nowait firstprivate(numElemReg)
+         --x          for (Index_t i = 0 ; i < numElemReg ; ++i) {
+         --x             work[i] = Real_t(0.) ;
+         --x          }
+         --       }
+         --x       CalcEnergyForElems(p_new, e_new, q_new, bvc, pbvc,
+         --x                          p_old, e_old,  q_old, compression, compHalfStep,
+         --x                          vnewc, work,  delvc, pmin,
+         --x                          p_cut, e_cut, q_cut, emin,
+         --x                          qq_old, ql_old, rho0, eosvmax,
+         --x                          numElemReg, regElemList);
+         info.work.all := (others =>0.0);
+         CalcEnergyForElems (domain, vnewc, info, regElemList);
+         --x    }
+      end loop;
+      -- #pragma omp parallel for firstprivate(numElemReg)
+      --x    for (Index_t i=0; i<numElemReg; ++i) {
+      --x       Index_t elem = regElemList[i];
+      --x       domain.p(elem) = p_new[i] ;
+      --x       domain.e(elem) = e_new[i] ;
+      --x       domain.q(elem) = q_new[i] ;
+      --x    }
+      for region_element in regElemList'Range loop
+         declare
+            element : Element_Record renames
+              domain.elements (regElemList (region_element));
+         begin
+            element.pressure_static  := info.p_new(region_element);
+            element.eenergy          := info.e_new(region_element);
+            element.pressure_dynamic := info.q_new(region_element);
+         end;
+      end loop;
+      --x    CalcSoundSpeedForElems(domain,
+      --x                           vnewc, rho0, e_new, p_new,
+      --x                           pbvc, bvc, ss4o3,
+      --x                           numElemReg, regElemList) ;
+      CalcSoundSpeedForElems(domain,
+                             vnewc, info.rho0, info.e_new, info.p_new,
+                             info.pbvc, info.bvc, info.ss4o3,
+                            regElemList);
+      --x    Release(&pbvc) ;
+      --x    Release(&bvc) ;
+      --x    Release(&q_new) ;
+      --x    Release(&e_new) ;
+      --x    Release(&p_new) ;
+      --x    Release(&work) ;
+      --x    Release(&ql_old) ;
+      --x    Release(&qq_old) ;
+      --x    Release(&compHalfStep) ;
+      --x    Release(&compression) ;
+      --x    Release(&q_old) ;
+      --x    Release(&p_old) ;
+      --x    Release(&delvc) ;
+      --x    Release(&e_old) ;
+      pragma Warnings (Off, "* modified by call, but value never referenced");
+      Release (info.bvc);
+      Release (info.compHalfStep);
+      Release (info.compression);
+      Release (info.delvc);
+      Release (info.e_new);
+      Release (info.e_old);
+      Release (info.p_new);
+      Release (info.p_old);
+      Release (info.pbvc);
+      Release (info.q_new);
+      Release (info.q_old);
+      Release (info.ql_old);
+      Release (info.qq_old);
+      Release (info.work);
+      pragma Warnings (On, "* modified by call, but value never referenced");
+      --x }
+   end EvalEOSForElems;
+
+   --- /******************************************/
+
+   --x static inline
+   --x void ApplyMaterialPropertiesForElems(Domain& domain, Real_t vnew[])
    --x {
    procedure ApplyMaterialPropertiesForElems
      (domain : in out Domain_Record;
@@ -2678,7 +2871,7 @@ package body LULESH is
       --x    Index_t numElem = domain.numElem() ;
       numElem : constant Element_Count := domain.numElem;
    begin
-      --   if (numElem != 0) {
+      --x   if (numElem != 0) {
       if numElem /=0 then
          declare
             ---     /* Expose all of the variables needed for material evaluation */
@@ -2733,48 +2926,52 @@ package body LULESH is
             --x                 vc = eosvmax ;
             --x           }
             --x           if (vc <= 0.) {
-            -- #if USE_MPI
-            --              MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
-            -- #else
+            --x #if USE_MPI
+            --x              MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
+            --x #else
             --x              exit(VolumeError);
-            -- #endif
+            --x #endif
             --x           }
             --x        }
             for element in 0..numElem-1 loop
                declare
-                  vc : Volume := domain.elements(element).relative_volume;
+                  vc : Volume := domain.elements(element).volume_relative;
                begin
                   if eosvmin /= 0.0 then
                      if vc < eosvmin then
-                        vc := eosvmin ;
+                        vc := eosvmin;
                      end if;
                   end if;
                   if eosvmax /= 0.0 then
                      if vc > eosvmax then
-                        vc := eosvmax ;
+                        vc := eosvmax;
                      end if;
                   end if;
                   if vc <= 0.0 then
-                     raise VolumeError;
+                     if USE_MPI then
+                        MPI.Abortt (MPI.COMM_WORLD, VolumeError);
+                     else
+                        raise VolumeError;
+                     end if;
                   end if;
                   end;
             end loop;
             --     }
             --x     for (Int_t r=0 ; r<domain.numReg() ; r++) {
-            --        Index_t numElemReg = domain.regElemSize(r);
-            --        Index_t *regElemList = domain.regElemlist(r);
-            --        Int_t rep;
-            --        //Determine load imbalance for this region
-            --        //round down the number with lowest cost
-            --        if(r < domain.numReg()/2)
-            -- 	rep = 1;
-            --        //you don't get an expensive region unless you at least have 5 regions
-            --        else if(r < (domain.numReg() - (domain.numReg()+15)/20))
-            --          rep = 1 + domain.cost();
-            --        //very expensive regions
-            --        else
-            -- 	rep = 10 * (1+ domain.cost());
-            --        EvalEOSForElems(domain, vnew, numElemReg, regElemList, rep);
+            --x        Index_t numElemReg = domain.regElemSize(r);
+            --x        Index_t *regElemList = domain.regElemlist(r);
+            --x        Int_t rep;
+            ---        //Determine load imbalance for this region
+            ---        //round down the number with lowest cost
+            --x        if(r < domain.numReg()/2)
+            --x 	rep = 1;
+            ---        //you don't get an expensive region unless you at least have 5 regions
+            --x        else if(r < (domain.numReg() - (domain.numReg()+15)/20))
+            --x          rep = 1 + domain.cost();
+            ---        //very expensive regions
+            --x        else
+            --x 	rep = 10 * (1+ domain.cost());
+            --x        EvalEOSForElems(domain, vnew, numElemReg, regElemList, rep);
             --x     }
             for region in 0..domain.numReg-1 loop
                declare
@@ -2784,14 +2981,14 @@ package body LULESH is
                     domain.regions(region).elements;
                   rep         : Cost_Type;
                begin
-                  --        //Determine load imbalance for this region
-                  --        //round down the number with lowest cost
+                  ---        //Determine load imbalance for this region
+                  ---        //round down the number with lowest cost
                   if region < domain.numReg/2 then
-                     --        //you don't get an expensive region unless you at least have 5 regions
+                     ---        //you don't get an expensive region unless you at least have 5 regions
                      rep := 1;
                   elsif region < (domain.numReg - (domain.numReg+15)/20) then
                      rep := 1 + domain.parameters.imbalance_cost;
-                     --        //very expensive regions
+                     ---        //very expensive regions
                   else
                      rep := 10 * (1 + domain.parameters.imbalance_cost);
                      EvalEOSForElems(domain, vnew, numElemReg, regElemList, rep);
@@ -2813,9 +3010,7 @@ package body LULESH is
    procedure UpdateVolumesForElems
      (domain : in out Domain_Record;
       vnew   : access Element_Volume_Array)
-     with Inline
-   is
-      Length : constant Element_Count := domain.numElem;
+     with Inline is
    begin
       --x    if (length != 0) {
       -- #pragma omp parallel for firstprivate(length, v_cut)
@@ -2826,18 +3021,16 @@ package body LULESH is
       --x          domain.v(i) = tmpV ;
       --x       }
       --x    }
-      if length > 0 then
-         for element in 0..length-1 loop
-            declare
-               tmpV : Volume := vnew(element);
-            begin
-               if abs(tmpV - 1.0) < domain.parameters.relative_volume_tolerance then
-                  tmpV := 1.0;
-               end if;
-               domain.elements(element).relative_volume := tmpV ;
-            end;
-         end loop;
-      end if;
+      for element in vnew'Range loop
+         declare
+            tmpV : Volume := vnew (element);
+         begin
+            if abs (tmpV - 1.0) < domain.parameters.volume_relative_tolerance then
+               tmpV := 1.0;
+            end if;
+            domain.elements (element).volume_relative := tmpV;
+         end;
+      end loop;
       --x    return ;
       --x }
    end UpdateVolumesForElems;
@@ -2865,16 +3058,19 @@ package body LULESH is
       ApplyMaterialPropertiesForElems (domain, vnew);
       UpdateVolumesForElems (domain, vnew);
       --x   Release(&vnew);
-      Free (vnew);
+      pragma Warnings (Off, "* modified by call, but value never referenced");
+      Release (vnew);
+      pragma Warnings (On, "* modified by call, but value never referenced");
       --x }
    end LagrangeElements;
-   -- /******************************************/
 
-   -- static inline
-   -- void CalcCourantConstraintForElems(Domain &domain, Index_t length,
-   --                                    Index_t *regElemlist,
-   --                                    Real_t qqc, Real_t& dtcourant)
-   -- {
+   --- /******************************************/
+
+   --x static inline
+   --x void CalcCourantConstraintForElems(Domain &domain, Index_t length,
+   --x                                    Index_t *regElemlist,
+   --x                                    Real_t qqc, Real_t& dtcourant)
+   --x {
    procedure CalcCourantConstraintForElems
      (domain : in out Domain_Record;
       region : in     Region_Index)
@@ -3023,7 +3219,7 @@ package body LULESH is
       --x       Real_t dthydro_tmp = dthydro ;
       --x       Index_t hydro_elem = -1 ;
       dthydro_tmp : Time_Span := domain.variables.dthydro;
-      -- Picking an unlikely number instead of -1:
+      --- Picking an unlikely number instead of -1:
       NEVER_SET   : constant Element_Count := 2_000_000_001;
       hydro_elem  : Element_Count := NEVER_SET;
       -- #if _OPENMP
@@ -3175,11 +3371,14 @@ package body LULESH is
       --x    CalcTimeConstraintsForElems(domain);
       CalcTimeConstraintsForElems(domain);
 
-      -- #if USE_MPI
-      -- #ifdef SEDOV_SYNC_POS_VEL_LATE
-      --    CommSyncPosVel(domain) ;
-      -- #endif
-      -- #endif
+      --x #if USE_MPI
+      --x #ifdef SEDOV_SYNC_POS_VEL_LATE
+      --x    CommSyncPosVel(domain) ;
+      --x #endif
+      --x #endif
+      if USE_MPI and then SEDOV_SYNC_POS_VEL_LATE then
+        Comm.SyncPosVel (domain);
+      end if;
       --x }
    end LagrangeLeapFrog;
 

@@ -7,7 +7,7 @@ project LULESH is
    for Main use ("LULESH-Main", "Test_Optimization");
 
    package Compiler is
-      for Default_Switches ("ada") use ("-gnato", "-fstack-check", "-gnata", "-g", "-gnat12", "-O3");
+      for Default_Switches ("ada") use ("-gnato", "-fstack-check", "-gnata", "-g", "-gnat12", "-O3", "-gnatwcfhjk.kl.lm.op.pr.r.stu.u.w");
    end Compiler;
 
    package Linker is
