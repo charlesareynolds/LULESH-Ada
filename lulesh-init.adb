@@ -463,11 +463,12 @@ package body LULESH.Init is
       --x   Index_t nidx = 0 ;
       meshEdgeElems : constant Element_Index :=
         Element_Index(this.variables.tp)*side_length ;
-      node    : Node_Index;
+      node          : Node_Index;
       t             : Coordinate_Vector;
       zidx          : Element_Index;
+
       function Calc_T_Part
-        (loc        : in Domain_Index;
+        (loc  : in Domain_Index;
          node : in Node_Index)
          return Length is
         (1.125 *

@@ -5,11 +5,15 @@ with Ada.Real_Time;
 with Ada.Unchecked_Deallocation;
 with Interfaces;
 with MPI;
+with System.Dim.Mks; 
+
+use System.Dim.Mks;
 
 package LULESH is
 
    package AC renames Ada.Calendar;
    package ART renames Ada.Real_Time;
+   package SI renames System.Dim.Mks;
 
    Usage_Error  : Exception;
    Coding_Error : Exception;
@@ -24,19 +28,19 @@ package LULESH is
    --x #define USE_OMP 1
    USE_OMP : constant Boolean := False;
 
-   -- #if USE_MPI
-   -- #include <mpi.h>
-
-   -- /*
-   --    define one of these three symbols:
-
-   --    SEDOV_SYNC_POS_VEL_NONE
-   --    SEDOV_SYNC_POS_VEL_EARLY
-   --    SEDOV_SYNC_POS_VEL_LATE
-   -- */
-
-   -- #define SEDOV_SYNC_POS_VEL_EARLY 1
-   -- #endif
+   --x #if USE_MPI
+   --x #include <mpi.h>
+   --- /*
+   ---    define one of these three symbols:
+   ---    SEDOV_SYNC_POS_VEL_NONE
+   ---    SEDOV_SYNC_POS_VEL_EARLY
+   ---    SEDOV_SYNC_POS_VEL_LATE
+   --- */
+   --x #define SEDOV_SYNC_POS_VEL_EARLY 1
+   --x #endif
+   SEDOV_SYNC_POS_VEL_NONE  : constant Boolean := False;
+   SEDOV_SYNC_POS_VEL_EARLY : constant Boolean := USE_MPI;
+   SEDOV_SYNC_POS_VEL_LATE  : constant Boolean := False;
 
    --- #include <math.h>
    --- #include <vector>
@@ -73,6 +77,7 @@ package LULESH is
    type Thread_Index  is new Index_Type;
 
    subtype Process_ID_Type     is MPI.Rank_Type;
+   subtype Rank_Type           is MPI.Rank_Type;
    subtype Rank_Count_Range    is MPI.Rank_Type range 1..MPI.Rank_Type'Last;
    subtype Process_Count_Range is Rank_Count_Range;
 
@@ -169,8 +174,8 @@ package LULESH is
    ---------------------------------------
 
    --x enum { VolumeError = -1, QStopError = -2 } ;
-   VolumeError : exception;
-   QStop_Error : exception;
+   VolumeError : constant MPI.errorcode_Type := MPI.errorcode_Type (-1);
+   QStop_Error : constant MPI.errorcode_Type := MPI.errorcode_Type (-2);
 
    --x inline real4  SQRT(real4  arg) { return sqrtf(arg) ; }
    --x inline real8  SQRT(real8  arg) { return sqrt(arg) ; }
@@ -319,39 +324,50 @@ package LULESH is
 
    --   private:
    --- International System of Units:
-   type SI_Type is new Real_Type;
+--SI   type SI_Type is new Real_Type;
    
-   type Cubic_Meters                 is new SI_Type; -- m**3
-   type Square_Meters                is new SI_Type; -- m**2
-   type Joules                       is new SI_Type; -- N*m
-   type Kilograms                    is new SI_Type; -- "kg"
-   type Kilograms_Per_Cubic_Meter    is new SI_Type; -- kg/m**3
-   type Meters                       is new SI_Type; -- "m"
-   type Meters_Per_Second            is new SI_Type; -- m/s
-   type Meters_Per_Second_Per_Second is new SI_Type; -- m/s**2 
-   type Newtons                      is new SI_Type; -- "N"; kg*m/s**2
-   type Pascals                      is new SI_Type; -- "Pa"; N/m**2
+--SI   type Cubic_Meters                 is new SI_Type; -- m**3
+--SI   type Square_Meters                is new SI_Type; -- m**2
+--SI   type Joules                       is new SI_Type; -- N*m
+--SI   type Kilograms                    is new SI_Type; -- "kg"
+--SI   type Kilograms_Per_Cubic_Meter    is new SI_Type; -- kg/m**3
+--SI   type Meters                       is new SI_Type; -- "m"
+--SI   type Meters_Per_Second            is new SI_Type; -- m/s
+--SI   type Meters_Per_Second_Per_Second is new SI_Type; -- m/s**2 
+--SI   type Newtons                      is new SI_Type; -- "N"; kg*m/s**2
+--SI   type Pascals                      is new SI_Type; -- "Pa"; N/m**2
    
-   -- Pressure*Area=Force:
-   function "*"(L : in Pascals; R : in Square_Meters) return Newtons is 
-     (Newtons(Real_Type(L)*Real_Type(R)))
-   with inline;
-   function "*"(L : in Square_Meters; R : in Pascals) return Newtons is 
-     (R*L)
-   with inline;
+--     -- Pressure*Area=Force:
+--     function "*"(L : in Pascals; R : in Square_Meters) return Newtons is 
+--       (Newtons(Real_Type(L)*Real_Type(R)))
+--     with inline;
+--     function "*"(L : in Square_Meters; R : in Pascals) return Newtons is 
+--       (R*L)
+--     with inline;
 
-   subtype Acceleration is Meters_Per_Second_Per_Second;
-   subtype Area         is Square_Meters; 
-   subtype Density      is Kilograms_Per_Cubic_Meter;  
-   subtype Energy       is Joules;  
-   subtype Force        is Newtons;   
-   subtype Length       is Meters;
-   subtype Mass         is Kilograms;
-   subtype Pressure     is Pascals;
-   subtype Time         is ART.Time;
+   subtype Acceleration is Mks_Type
+   with Dimension =>
+     (Meter  =>  1,
+      Second => -2,
+      others =>  0);
+--SI   subtype Area         is Square_Meters; 
+--SI   subtype Acceleration is Meters_Per_Second_Per_Second;
+   subtype Density is Mks_Type
+   with Dimension => 
+     (Kilogram => 1,
+      Meter    => -3,
+      others   => 0);
+--SI   subtype Density      is Kilograms_Per_Cubic_Meter;  
+--SI   subtype Energy       is Joules;  
+--SI   subtype Force        is Newtons;   
+--SI   subtype Length       is Meters;
+--SI   subtype Mass         is Kilograms;
+--SI   subtype Pressure     is Pascals;
+--SI   subtype Time         is ART.Time;
    subtype Time_Span    is ART.Time_Span;
-   subtype Velocity     is Meters_Per_Second;
-   subtype Volume       is Cubic_Meters;
+   subtype Velocity     is Speed;
+--SI   subtype Velocity     is Meters_Per_Second;
+--SI   subtype Volume       is Cubic_Meters;
    
    type Compression_Type is new Real_Type;
    type Derivative_Type  is new Real_Type;

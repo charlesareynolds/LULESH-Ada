@@ -21,7 +21,7 @@ package body LULESH.Viz is
 
 -- // Function prototypes
 -- static void
--- DumpDomainToVisit(DBfile *db, Domain& domain, int myRank);
+-- DumpDomainToVisit(DBfile *db, Domain& domain, iMPI.Trrwrwerwerwerwerwerwernt myRank);
 -- static
 
 

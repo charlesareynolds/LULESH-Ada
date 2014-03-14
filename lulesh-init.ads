@@ -22,7 +22,7 @@ package LULESH.Init is
    --x                     Int_t *col, Int_t *row, Int_t *plane, Int_t *side);
    procedure InitMeshDecomp
      (numRanks         : in Rank_Count_Range;
-      myRank           : in MPI.Rank_Type;
+      myRank           : in Rank_Type;
       domain_column    : out Domain_Index;
       domain_row       : out Domain_Index;
       domain_plane     : out Domain_Index;

@@ -16,8 +16,8 @@ procedure Lulesh.main is
    --x    Int_t myRank ;
    --x    struct cmdLineOpts opts;
    locDom   : Domain_Record;
-   numRanks : MPI.Rank_Type;
-   myRank   : MPI.Rank_Type;
+   numRanks : Rank_Type;
+   myRank   : Rank_Type;
    opts     : LULESH.Util.cmdLineOpts;
 
    --- from declarations below:
@@ -160,7 +160,7 @@ begin
       --!! pointer to the array of all masses??
      fieldData := Domain.nodalMass ;
      --- // Initial domain boundary communication
-      LULESH.Comm.CommRecv
+      LULESH.Comm.Recv
         (domain     => locDom,
          msgType    => MSG_COMM_SBN,
          xferFields => 1,
@@ -169,7 +169,7 @@ begin
          dz         => locDom.parameters.size(Z) + 1,
          doRecv     => true,
          planeOnly  => false);
-      LULESH.Comm.CommSend
+      LULESH.Comm.Send
         (domain     => locDom,
          msgType    => MSG_COMM_SBN,
          xferFields => 1,
@@ -179,7 +179,7 @@ begin
          dz         => locDom.parameters.size(Z) + 1,
          doSend     => true,
          planeOnly  => false);
-      LULESH.Comm.CommSBN
+      LULESH.Comm.SBN
         (domain     => locDom,
          xferFields => 1,
          fieldData  => fieldData);

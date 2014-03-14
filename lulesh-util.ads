@@ -28,7 +28,7 @@ package LULESH.Util is
    --x void ParseCommandLineOptions(int argc, char *argv[],
    --x                              Int_t myRank, struct cmdLineOpts *opts);
    procedure ParseCommandLineOptions
-     (myRank : in MPI.Rank_Type;
+     (myRank : in Rank_Type;
       opts   : in out cmdLineOpts);
 
    --x void VerifyAndWriteFinalOutput(Real_t elapsed_time,
@@ -39,7 +39,7 @@ package LULESH.Util is
      (elapsed_time : in ART.Time_Span;
       locDom       : in out Domain_Record;
       side_length  : in Element_Index;
-      numRanks     : in MPI.Rank_Type);
+      numRanks     : in Rank_Type);
 
 
 end LULESH.Util;

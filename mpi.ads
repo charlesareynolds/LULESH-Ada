@@ -11,6 +11,7 @@ package MPI is
    type Comm_Type is private;
    COMM_WORLD : constant Comm_Type;
 
+   type errorcode_Type is new Integer;
    type Datatype_Type is
      (DOUBLE);
 
@@ -36,7 +37,8 @@ package MPI is
 
    -- int MPI_Abort( MPI_Comm comm, int errorcode )
    procedure Abortt
-     (comm : in  Comm_Type);
+     (comm      : in  Comm_Type;
+      errorcode : in errorcode_Type);
 
    -- double MPI_Wtime()
    function Wtime return ART.Time;

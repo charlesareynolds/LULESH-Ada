@@ -5,7 +5,7 @@ package LULESH.Viz is
    procedure DumpToVisit
      (domain  : in out Domain_Record;
       numFiles : in Int_t;
-      myRank   : in MPI.Rank_Type;
-      numRanks : in MPI.Rank_Type);
+      myRank   : in Rank_Type;
+      numRanks : in Rank_Type);
 
 end LULESH.Viz;

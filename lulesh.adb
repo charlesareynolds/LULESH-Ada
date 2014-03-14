@@ -2415,90 +2415,97 @@ package body LULESH is
 
    --- /******************************************/
 
-   -- static inline
-   -- void CalcEnergyForElems(Real_t* p_new, Real_t* e_new, Real_t* q_new,
-   --                         Real_t* bvc, Real_t* pbvc,
-   --                         Real_t* p_old, Real_t* e_old, Real_t* q_old,
-   --                         Real_t* compression, Real_t* compHalfStep,
-   --                         Real_t* vnewc, Real_t* work, Real_t* delvc, Real_t pmin,
-   --                         Real_t p_cut, Real_t  e_cut, Real_t q_cut, Real_t emin,
-   --                         Real_t* qq_old, Real_t* ql_old,
-   --                         Real_t rho0,
-   --                         Real_t eosvmax,
-   --                         Index_t length, Index_t *regElemList)
-   -- {
+   --x static inline
+   --x void CalcEnergyForElems(Real_t* p_new, Real_t* e_new, Real_t* q_new,
+   --x                         Real_t* bvc, Real_t* pbvc,
+   --x                         Real_t* p_old, Real_t* e_old, Real_t* q_old,
+   --x                         Real_t* compression, Real_t* compHalfStep,
+   --x                         Real_t* vnewc, Real_t* work, Real_t* delvc, Real_t pmin,
+   --x                         Real_t p_cut, Real_t  e_cut, Real_t q_cut, Real_t emin,
+   --x                         Real_t* qq_old, Real_t* ql_old,
+   --x                         Real_t rho0,
+   --x                         Real_t eosvmax,
+   --x                         Index_t length, Index_t *regElemList)
+   --x {
    procedure CalcEnergyForElems
      (domain      : in out Domain_Record;
       vnewc       : access Element_Volume_Array;
       info        : in EOS_Info_Record;
       regElemList : access Element_Element_Index_Array)
-    --       (domain      : in out Domain_Record;
---        p_new   : access Element_Pressure_Array;
---        e_new : access Element_Energy_Array;
---         q_new : access Element_Pressure_Array;
---        bvc: access Element_Real_Array;
---        pbvc: access Element_Real_Array;
---       p_old : access Element_Pressure_Array;
---         e_old: access Element_Energy_Array;
---         q_old : access Element_Pressure_Array;
---        Real_t* compression : access Element_Compression_Array;
---        Real_t* compHalfStep,
---         vnewc : access Element_Volume_Array;
---        Real_t* work,
---        Real_t* delvc,
---        Real_t* qq_old,
---        Real_t* ql_old,
---        Index_t length,
---        regElemList : access Element_Element_Index_Array)
-   with inline
+     with inline
    is
---        Real_t pmin,
---        Real_t p_cut,
---        Real_t  e_cut,
---        Real_t q_cut,
---        Real_t emin,
---        rho0        : in Density;
---        Real_t eosvmax,
-   --    Real_t *pHalfStep = Allocate<Real_t>(length) ;
+      --x    Real_t *pHalfStep = Allocate<Real_t>(length) ;
+      pHalfStep : Element_Pressure_Array_Access :=
+        new Element_Pressure_Array (info.compHalfStep'Range);
    begin
-null;
-   -- #pragma omp parallel for firstprivate(length, emin)
-   --    for (Index_t i = 0 ; i < length ; ++i) {
-   --       e_new[i] = e_old[i] - Real_t(0.5) * delvc[i] * (p_old[i] + q_old[i])
-   --          + Real_t(0.5) * work[i];
-
-   --       if (e_new[i]  < emin ) {
-   --          e_new[i] = emin ;
-   --       }
-   --    }
-
-   --    CalcPressureForElems(pHalfStep, bvc, pbvc, e_new, compHalfStep, vnewc,
-   --                         pmin, p_cut, eosvmax, length, regElemList);
-
-   -- #pragma omp parallel for firstprivate(length, rho0)
-   --    for (Index_t i = 0 ; i < length ; ++i) {
-   --       Real_t vhalf = Real_t(1.) / (Real_t(1.) + compHalfStep[i]) ;
-
-   --       if ( delvc[i] > Real_t(0.) ) {
-   --          q_new[i] /* = qq_old[i] = ql_old[i] */ = Real_t(0.) ;
-   --       }
-   --       else {
-   --          Real_t ssc = ( pbvc[i] * e_new[i]
-   --                  + vhalf * vhalf * bvc[i] * pHalfStep[i] ) / rho0 ;
-
-   --          if ( ssc <= Real_t(.1111111e-36) ) {
-   --             ssc = Real_t(.3333333e-18) ;
-   --          } else {
-   --             ssc = SQRT(ssc) ;
-   --          }
-
-   --          q_new[i] = (ssc*ql_old[i] + qq_old[i]) ;
-   --       }
-
-   --       e_new[i] = e_new[i] + Real_t(0.5) * delvc[i]
-   --          * (  Real_t(3.0)*(p_old[i]     + q_old[i])
-   --               - Real_t(4.0)*(pHalfStep[i] + q_new[i])) ;
-   --    }
+      -- #pragma omp parallel for firstprivate(length, emin)
+      --x    for (Index_t i = 0 ; i < length ; ++i) {
+      --x       e_new[i] = e_old[i] - Real_t(0.5) * delvc[i] * (p_old[i] + q_old[i])
+      --x          + Real_t(0.5) * work[i];
+      --x       if (e_new[i]  < emin ) {
+      --x          e_new[i] = emin ;
+      --x       }
+      --x    }
+      for element in info.e_new'Range loop
+         info.e_new (element) :=
+           info.e_old (element) -
+           0.5 * info.delvc (element) * (info.p_old (element) + info.q_old (element))
+           + 0.5 * info.work (element);
+         if info.e_new (element) < info.emin then
+            info.e_new (element) := info.emin;
+         end if;
+      end loop;
+      --x    CalcPressureForElems(pHalfStep, bvc, pbvc, e_new, compHalfStep, vnewc,
+      --x                         pmin, p_cut, eosvmax, length, regElemList);
+      CalcPressureForElems(pHalfStep, bvc, pbvc, e_new, compHalfStep, vnewc,
+                           pmin, p_cut, eosvmax, length, regElemList);
+      -- #pragma omp parallel for firstprivate(length, rho0)
+      --x    for (Index_t i = 0 ; i < length ; ++i) {
+      --x       Real_t vhalf = Real_t(1.) / (Real_t(1.) + compHalfStep[i]) ;
+      --x       if ( delvc[i] > Real_t(0.) ) {
+      --x          q_new[i] /* = qq_old[i] = ql_old[i] */ = Real_t(0.) ;
+      --x       }
+      --x       else {
+      --x          Real_t ssc = ( pbvc[i] * e_new[i]
+      --x                  + vhalf * vhalf * bvc[i] * pHalfStep[i] ) / rho0 ;
+      --x          if ( ssc <= Real_t(.1111111e-36) ) {
+      --x             ssc = Real_t(.3333333e-18) ;
+      --x          } else {
+      --x             ssc = SQRT(ssc) ;
+      --x          }
+      --x          q_new[i] = (ssc*ql_old[i] + qq_old[i]) ;
+      --x       }
+      --x       e_new[i] = e_new[i] + Real_t(0.5) * delvc[i]
+      --x          * (  Real_t(3.0)*(p_old[i]     + q_old[i])
+      --x               - Real_t(4.0)*(pHalfStep[i] + q_new[i])) ;
+      --x    }
+      for element in compHalfStep'Range loop
+         declare
+            vhalf : constant Real_Type := 1.0 / (1.0 + info.compHalfStep (element));
+         begin
+            if info.delvc (element) > 0.0 then
+               info.q_new (element) := 0.0;
+            else
+               declare
+                  ssc : Real_Type :=
+                    (info.pbvc (element) * info.e_new (element)
+                      + vhalf**2 * info.bvc (element) * pHalfStep (element))
+                      / info.rho0;
+               begin
+                  if ssc <= 0.1111111e-36 then
+                     ssc := 0.3333333e-18;
+                  else
+                     ssc := SQRT(ssc);
+                  end if;
+                  info.q_new (element) := ssc * info.ql_old (element)
+                    + info.qq_old (element);
+               end;
+            end if;
+            info.e_new (element) := info.e_new (element) + 0.5 * info.delvc (element)
+              * (3.0*(info.p_old (element) + info.q_old (element))
+                 - 4.0*(pHalfStep (element) + info.q_new (element)));
+         end;
+     end loop;
 
    -- #pragma omp parallel for firstprivate(length, emin, e_cut)
    --    for (Index_t i = 0 ; i < length ; ++i) {
@@ -2789,7 +2796,7 @@ null;
          --x          for (Index_t i = 0 ; i < numElemReg ; ++i) {
          --x             work[i] = Real_t(0.) ;
          --x          }
-         --       }
+         --       } // #pragma omp parallel
          --x       CalcEnergyForElems(p_new, e_new, q_new, bvc, pbvc,
          --x                          p_old, e_old,  q_old, compression, compHalfStep,
          --x                          vnewc, work,  delvc, pmin,
@@ -2951,12 +2958,13 @@ null;
                      if USE_MPI then
                         MPI.Abortt (MPI.COMM_WORLD, VolumeError);
                      else
-                        raise VolumeError;
+                        raise Coding_Error
+                          with "VolumeError";
                      end if;
                   end if;
                   end;
             end loop;
-            --     }
+            --     } // #pragma omp parallel
             --x     for (Int_t r=0 ; r<domain.numReg() ; r++) {
             --x        Index_t numElemReg = domain.regElemSize(r);
             --x        Index_t *regElemList = domain.regElemlist(r);
@@ -3040,7 +3048,7 @@ null;
    --x static inline
    --x void LagrangeElements(Domain& domain, Index_t numElem)
    --x {
-   --x   Real_t *vnew = Allocate<Real_t>(numElem) ;  /* new relative vol -- temp */
+   --x   Real_t *vnew = Allocate<Real_t>(numElem) ;  /* new relative vol - temp */
    procedure LagrangeElements (domain : in out domain_record)
      with inline
    is
@@ -3160,7 +3168,7 @@ null;
       end loop;
       --x       dtcourant_per_thread[thread_num]    = dtcourant_tmp ;
       --x       courant_elem_per_thread[thread_num] = courant_elem ;
-      --    }
+      --    } // #pragma omp parallel firstprivate(length, qqc)
       dtcourant_per_thread(thread_num)    := dtcourant_tmp;
       courant_elem_per_thread(thread_num) := courant_elem;
       --x    for (Index_t i = 1; i < threads; ++i) {
@@ -3264,7 +3272,7 @@ null;
       end loop;
       --x       dthydro_per_thread[thread_num]    = dthydro_tmp ;
       --x       hydro_elem_per_thread[thread_num] = hydro_elem ;
-      --    }
+      --    } // #pragma omp parallel firstprivate(length, dvovmax)
       dthydro_per_thread(thread_num)    := dthydro_tmp;
       hydro_elem_per_thread(thread_num) := hydro_elem;
       --x    for (Index_t i = 1; i < threads; ++i) {
@@ -3324,16 +3332,17 @@ null;
 
    --x static inline
    --x void LagrangeLeapFrog(Domain& domain)
-   ----------------------
-   -- EXPORTED (private):
-   ----------------------
+   -----------------------
+   --- EXPORTED (private):
+   -----------------------
    procedure LagrangeLeapFrog
      (domain : in out Domain_Record) is
       --x {
+      --x #ifdef SEDOV_SYNC_POS_VEL_LATE
+      --x    Domain_member fieldData[6] ;
+      --x #endif
+      fieldData : Domain_member (0..6);
    begin
-      -- #ifdef SEDOV_SYNC_POS_VEL_LATE
-      --    Domain_member fieldData[6] ;
-      -- #endif
 
       ---    /* calculate nodal forces, accelerations, velocities, positions, with
       ---     * applied boundary conditions and slide surface considerations */
@@ -3341,32 +3350,55 @@ null;
       LagrangeNodal(domain);
 
 
-      -- #ifdef SEDOV_SYNC_POS_VEL_LATE
-      -- #endif
+      --x #ifdef SEDOV_SYNC_POS_VEL_LATE
+      --x #endif
 
       ---    /* calculate element quantities (i.e. velocity gradient & q), and update
       ---     * material states */
       --x    LagrangeElements(domain, domain.numElem());
       LagrangeElements(domain);
 
-      -- #if USE_MPI
-      -- #ifdef SEDOV_SYNC_POS_VEL_LATE
-      --    CommRecv(domain, MSG_SYNC_POS_VEL, 6,
-      --             domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() + 1,
-      --             false, false) ;
-
+      --x #if USE_MPI
+      --x #ifdef SEDOV_SYNC_POS_VEL_LATE
+      --x    CommRecv(domain, MSG_SYNC_POS_VEL, 6,
+      --x             domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() + 1,
+      --x             false, false) ;
       --    fieldData[0] = &Domain::x ;
       --    fieldData[1] = &Domain::y ;
       --    fieldData[2] = &Domain::z ;
       --    fieldData[3] = &Domain::xd ;
       --    fieldData[4] = &Domain::yd ;
       --    fieldData[5] = &Domain::zd ;
-
-      --    CommSend(domain, MSG_SYNC_POS_VEL, 6, fieldData,
-      --             domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() + 1,
-      --             false, false) ;
-      -- #endif
-      -- #endif
+      --x    CommSend(domain, MSG_SYNC_POS_VEL, 6, fieldData,
+      --x             domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() + 1,
+      --x             false, false) ;
+      --x #endif
+      --x #endif
+      if USE_MPI and then SEDOV_SYNC_POS_VEL_LATE then
+         Comm.Recv (domain     => domain,
+                    msgType    => MSG_SYNC_POS_VEL,
+                    xferFields => 6,
+                    dx         => domain.parameters.size (X) + 1,
+                    dy         => domain.parameters.size (Y) + 1,
+                    dz         => domain.parameters.size (Z) + 1,
+                    doRecv     => false,
+                    planeOnly  => false);
+      --    fieldData[0] = &Domain::x ;
+      --    fieldData[1] = &Domain::y ;
+      --    fieldData[2] = &Domain::z ;
+      --    fieldData[3] = &Domain::xd ;
+      --    fieldData[4] = &Domain::yd ;
+      --    fieldData[5] = &Domain::zd ;
+         Comm.Send (domain     => domain,
+                    msgType    => MSG_SYNC_POS_VEL,
+                    xferFields => 6,
+                    fieldData  => fieldData,
+                    dx         => domain.parameters.size (X) + 1,
+                    dy         => domain.parameters.size (Y) + 1,
+                    dz         => domain.parameters.size (Z) + 1,
+                    doSend     => false,
+                    planeOnly  => false);
+      end if;
 
       --x    CalcTimeConstraintsForElems(domain);
       CalcTimeConstraintsForElems(domain);
