@@ -208,14 +208,13 @@ package LULESH is
    --x inline real8  SQRT(real8  arg) { return sqrt(arg) ; }
    --x inline real10 SQRT(real10 arg) { return sqrtl(arg) ; }
    package real4_Elementary_functions is new Ada.Numerics
-     .Generic_Elementary_Functions
-     (real4);
+     .Generic_Elementary_Functions (real4);
    package real8_Elementary_functions is new Ada.Numerics
-     .Generic_Elementary_Functions
-     (real8);
+     .Generic_Elementary_Functions (real8);
    package real10_Elementary_functions is new Ada.Numerics
-     .Generic_Elementary_Functions
-     (real10);
+     .Generic_Elementary_Functions (real10);
+   package Mks_Type_Elementary_functions is new Ada.Numerics
+     .Generic_Elementary_Functions (Mks_Type);
 
    function SQRT
      (This : in real4) return real4 renames
@@ -226,6 +225,9 @@ package LULESH is
    function SQRT
      (This : in real10) return real10 renames
      real10_Elementary_functions.Sqrt;
+   function SQRT
+     (This : in Mks_Type) return Mks_Type renames
+     Mks_Type_Elementary_functions.Sqrt;
 
    --x inline real4  CBRT(real4  arg) { return cbrtf(arg) ; }
    --x inline real8  CBRT(real8  arg) { return cbrt(arg) ; }
@@ -379,12 +381,12 @@ package LULESH is
 --       (R*L)
 --     with inline;
 
-   subtype Acceleration is Mks_Type with
-        Dimension => (Meter => 1, Second => -2, others => 0);
+   subtype Acceleration is Mks_Type 
+   with Dimension => (Meter => 1, Second => -2, others => 0);
 --SI   subtype Area         is Square_Meters;
 --SI   subtype Acceleration is Meters_Per_Second_Per_Second;
-   subtype Density is Mks_Type with
-        Dimension => (Kilogram => 1, Meter => -3, others => 0);
+   subtype Density is Mks_Type 
+   with Dimension => (Kilogram => 1, Meter => -3, others => 0);
 --SI   subtype Density      is Kilograms_Per_Cubic_Meter;
 --SI   subtype Energy       is Joules;
 --SI   subtype Force        is Newtons;
@@ -398,19 +400,20 @@ package LULESH is
 --SI   subtype Velocity     is Meters_Per_Second;
 --SI   subtype Volume       is Cubic_Meters;
 
+   subtype Compression_Type is Mks_Type 
+   with Dimension => (Meter => -3, others => 0);
+   
    subtype Dimensionless is Mks_Type;
 
-   type Compression_Type is new Real_Type;
+   subtype Derivative_Type is Dimensionless;
 
-   type Derivative_Type is new Real_Type;
+   subtype Determinant_Type is Dimensionless;
 
-   type Determinant_Type is new Real_Type;
+   subtype Gradient_Type is Dimensionless;
 
-   type Gradient_Type is new Real_Type;
+   subtype Relative_Change is Dimensionless;
 
-   type Relative_Change is new Real_Type;
-
-   type VDOV_Type is new Real_Type;
+   subtype VDOV_Type is Dimensionless;
 
 --SI     function "/"(L : in Relative_Change; R : in VDOV_Type) return Time_Span is
 --SI       (ART.To_Time_Span(Duration(Real_Type(L)*Real_Type(R))))
