@@ -25,7 +25,7 @@ procedure Lulesh.main is
    endd          : ART.Time;
    elapsed_time  : ART.Time_Span;
    elapsed_timeG : ART.Time_Span;
-   fieldData     : Domain_member;
+   fieldData     : Comm.Domain_member;
    use type ART.Time;
 
    function Image (this : in ART.Time) return String
@@ -38,7 +38,7 @@ procedure Lulesh.main is
    end Image;
 
    function Image (this : in ART.Time_Span) return String is
-      (ART.To_Duration(this)'Img);
+     (ART.To_Duration(this)'Img);
 
 begin
    --x #if USE_MPI
@@ -98,9 +98,9 @@ begin
    if (myRank = 0 and not opts.quiet) then
       ATI.Put_Line ("Running problem size " & opts.side_length'Img & "^3 per domain until completion");
       ATI.Put_Line ("Num processors: " & numRanks'Img);
-      if USE_OMP then
-         ATI.Put_Line ("Num threads: " & omp_get_max_threads'Img);
-         end if;
+--        if USE_OMP then
+--           ATI.Put_Line ("Num threads: " & omp_get_max_threads'Img);
+--        end if;
       ATI.Put_Line ("Total number of elements: " &
                       Int_t'Image(Int_T(numRanks)*Int_t(opts.side_length)**3));
       ATI.Put_Line ("");
@@ -216,9 +216,11 @@ begin
       LagrangeLeapFrog (locDom);
 
       if opts.showProg and not opts.quiet and myRank = 0 then
-         ATI.Put_Line ("cycle = " & locDom.variables.cycle'Img
-                       & ", current_time = "& Image(locDom.variables.current_time)
-                       & ", dt = " & Image(locDom.variables.deltatime));
+         ATI.Put ("cycle = " & locDom.variables.cycle'Img
+                  & ", current_time = ");
+         SIO.Put (locDom.variables.current_time);
+         ATI.Put (", dt = ");
+         SIO.Put (locDom.variables.deltatime); ATI.New_Line;
       end if;
    end loop;
    ---    // Use reduced max elapsed time

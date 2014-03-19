@@ -212,7 +212,7 @@ package body LULESH.Init is
       this.parameters :=
         (energy_tolerance           => 1.0e-7,
          pressure_tolerance         => 1.0e-7,
-         pressure_dynamic_tolerance => 1.0e-7,
+         artificial_viscosity_tolerance => 1.0e-7,
          volume_relative_tolerance  => 1.0e-10,
          velocity_tolerance         => 1.0e-7,
          hgcoef                     => 3.0,
@@ -282,11 +282,11 @@ package body LULESH.Init is
       --x       v(i) = Real_t(1.0) ;
       --x    }
       for index in 0..this.numElem-1 loop
-         this.elements(index).eenergy           := 0.0;
-         this.elements(index).pressure_static  := 0.0;
-         this.elements(index).pressure_dynamic := 0.0;
-         this.elements(index).sound_speed      := 0.0;
-         this.elements(index).volume_relative  := 1.0;
+         this.elements(index).eenergy              := 0.0;
+         this.elements(index).epressure             := 0.0;
+         this.elements(index).artificial_viscosity := 0.0;
+         this.elements(index).sound_speed          := 0.0;
+         this.elements(index).volume_relative      := 1.0;
       end loop;
       --x    for (Index_t i=0; i<numNode(); ++i) {
       --x       xd(i) = Real_t(0.0) ;

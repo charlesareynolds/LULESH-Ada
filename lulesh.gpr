@@ -22,5 +22,9 @@ project LULESH is
       for Default_Switches ("ada") use ("-E");
    end Binder;
 
+   package Pretty_Printer is
+      for Default_Switches ("ada") use ("--use-on-new-line", "--decimal-grouping=3", "--based-grouping=4", "--call_threshold=2", "--par_threshold=2", "--insert-blank-lines");
+   end Pretty_Printer;
+
 end LULESH;
 

@@ -225,7 +225,7 @@ package body LULESH is
          --x       Real_t gnewdt = Real_t(1.0e+20) ;
          --x       Real_t newdt ;
          declare
-            ratio  : Real_Type;
+            ratio  : Dimensionless;
             olddt  : constant Time_Span := domain.variables.deltatime;
             gnewdt : Time_Span := Time_Span_Last;
             newdt  : Time_Span;
@@ -261,7 +261,7 @@ package body LULESH is
             --x             newdt = olddt*domain.deltatimemultub() ;
             --x          }
             --x       }
-            ratio := Real_Type (newdt / olddt);
+            ratio := newdt / olddt;
             if ratio >= 1.0 then
                if ratio < domain.variables.delta_time_multiplier_lower_bound then
                   newdt := olddt;
@@ -349,10 +349,13 @@ package body LULESH is
       --x       sigxx[i] = sigyy[i] = sigzz[i] =  - domain.p(i) - domain.q(i) ;
       --x    }
       for element in domain.elements'Range loop
-         stress_integrated(element) :=
-           (others =>
-              - domain.elements(element).pressure_static
-              - domain.elements(element).pressure_dynamic);
+         -- Pressure'Base is to make sure the dimensions match.
+         pragma Warnings (Off, "redundant conversion, expression is of type ""MKS_TYPE""");
+         stress_integrated (element) :=
+           (others => Pressure'Base
+              (- domain.elements(element).epressure
+               - domain.elements(element).artificial_viscosity));
+           pragma Warnings (On, "redundant conversion, expression is of type ""MKS_TYPE""");
       end loop;
       --x }
    end InitStressTermsForElems;
@@ -568,17 +571,29 @@ package body LULESH is
       type Bisect_Coordinate_Array is array (Bisect_Range) of Coordinate_Vector;
       bisect : constant Bisect_Coordinate_Array :=
         (0 => 0.5 * (
-           - node_coords(0) - node_coords(1) + node_coords(2) + node_coords(3)),
+         - Node_Coords (0) - Node_Coords (1) + Node_Coords (2) + Node_Coords (3)),
          1 => 0.5 * (
-           - node_coords(0) + node_coords(1) + node_coords(2) - node_coords(3)));
+         - Node_Coords (0) + Node_Coords (1) + Node_Coords (2) - Node_Coords (3)));
 
+
+      -- Dimension aspects seem to be lost when using a dimensioned type as a
+      -- generic actual parameter. This means that an assignment like:
+      --      Test1 : constant Area_Vector :=
+      --          (X => Area(1.0)...
+      -- gets the semantic error:
+      --         635:15 expected dimension [], found [L**2]
+      -- So Calc_Area returns Area'Base, which is dimension []:
+      --
+      pragma Warnings (Off, "redundant conversion, expression is of type ""MKS_TYPE""");
       function Calc_Area
-        (axis_1, axis_2 : in Cartesian_Axes)
-         return Area is
-        (0.25 * Area
-           (bisect (0)(axis_1) * bisect (1)(axis_2) -
-            bisect (0)(axis_2) * bisect (1)(axis_1)))
-        with Inline;
+        (Axis_1, Axis_2 : in Cartesian_Axes)
+         return Area'Base is
+         -- Area'Base is to make sure the dimensions match.
+        (0.25 * Area'Base
+           (Bisect (0) (Axis_1) * Bisect (1) (Axis_2) -
+            Bisect (0) (Axis_2) * Bisect (1) (Axis_1)))
+      with Inline;
+      pragma Warnings (On, "redundant conversion, expression is of type ""MKS_TYPE""");
 
       face_area : constant Area_Vector :=
         (X => Calc_Area (Y, Z),
@@ -768,11 +783,12 @@ package body LULESH is
             --x     Real_t x_local[8] ;
             --x     Real_t y_local[8] ;
             --x     Real_t z_local[8] ;
-            element_node_coords        : NodesPerElement_Coordinate_Array;
-            element_node_indexes       : constant NodesPerElement_Element_Index_Array
+            element_node_coords  : NodesPerElement_Coordinate_Array;
+            element_node_indexes : constant NodesPerElement_Element_Index_Array
               := domain.elements(element).node_indexes;
-            B                          : NodesPerElement_Area_Vector_Array;
+            B                    : NodesPerElement_Area_Vector_Array;
             shape_function_areas : Derivative_Cartesian_Real_Array;
+            temp_volume          : Volume;
          begin
             ---     // get nodal coordinates from global arrays and copy into local arrays.
             --x     CollectDomainNodesToElemNodes(domain, elemToNode, x_local, y_local, z_local);
@@ -787,7 +803,9 @@ package body LULESH is
             CalcElemShapeFunctionDerivatives
               (enodes         => element_node_coords,
                B              => shape_function_areas,
-               element_volume => Volume (determinants (element)));
+               element_volume => temp_volume);
+            determinants (element) := Determinant_Type(temp_volume);
+--               element_volume => Volume (determinants (element)));
 
             --- CalcElemShapeFunctionDerivatives above sets B.
             --- CalcElemNodeNormals below resets B before using it.
@@ -1422,7 +1440,8 @@ package body LULESH is
             --       }
             for element in determinants'Range loop
                if determinants(element) <= 0.0 then
-                  raise VolumeError;
+                  raise Coding_Error
+                    with "VolumeError";
                end if;
             end loop;
 
@@ -1652,7 +1671,7 @@ package body LULESH is
       qq_old       : Element_Pressure_Array_Access := new Element_Pressure_Array (0..numElem);
       rho0         : Density;
       ss4o3        : Real_Type;
-      work         : Element_Real_Array_Access := new Element_Real_Array (0..numElem);
+      work         : Element_Energy_Array_Access := new Element_Energy_Array (0..numElem);
    end record;
 
    -- /******************************************/
@@ -2479,12 +2498,12 @@ package body LULESH is
       --x          * (  Real_t(3.0)*(p_old[i]     + q_old[i])
       --x               - Real_t(4.0)*(pHalfStep[i] + q_new[i])) ;
       --x    }
-      for element in compHalfStep'Range loop
+      for element in info.compHalfStep'Range loop
          declare
-            vhalf : constant Real_Type := 1.0 / (1.0 + info.compHalfStep (element));
+            vhalf : constant Volume := Volume (1.0 / (1.0 + info.compHalfStep (element)));
          begin
-            if info.delvc (element) > 0.0 then
-               info.q_new (element) := 0.0;
+            if info.delvc (element) > Volume (0.0) then
+               info.q_new (element) := Pressure (0.0);
             else
                declare
                   ssc : Real_Type :=
@@ -2659,7 +2678,7 @@ package body LULESH is
 --        e_cut : constant Energy    := domain.parameters.energy_tolerance;
 --        p_cut : constant Pressure  := domain.parameters.pressure_tolerance;
 --        ss4o3 : constant Real_Type := domain.parameters.four_thirds;
---        q_cut : constant Pressure  := domain.parameters.pressure_dynamic_tolerance;
+--        q_cut : constant Pressure  := domain.parameters.artificial_viscosity_tolerance;
       --x    Real_t eosvmax = domain.eosvmax() ;
       --x    Real_t eosvmin = domain.eosvmin() ;
       --x    Real_t pmin    = domain.pmin() ;
@@ -2727,10 +2746,10 @@ package body LULESH is
             begin
               info.e_old(region_element)  := element.eenergy;
               info.delvc(region_element)  := element.new_volume_relative_delta;
-              info.p_old(region_element)  := element.pressure_static;
-              info.q_old(region_element)  := element.pressure_dynamic;
-              info.qq_old(region_element) := element.pressure_dynamic_quadratic;
-              info.ql_old(region_element) := element.pressure_dynamic_linear;
+              info.p_old(region_element)  := element.epressure;
+              info.q_old(region_element)  := element.artificial_viscosity;
+              info.qq_old(region_element) := element.artificial_viscosity_quadratic;
+              info.ql_old(region_element) := element.artificial_viscosity_linear;
             end;
          end loop;
 
@@ -2819,9 +2838,9 @@ package body LULESH is
             element : Element_Record renames
               domain.elements (regElemList (region_element));
          begin
-            element.pressure_static  := info.p_new(region_element);
-            element.eenergy          := info.e_new(region_element);
-            element.pressure_dynamic := info.q_new(region_element);
+            element.epressure             := info.p_new(region_element);
+            element.eenergy              := info.e_new(region_element);
+            element.artificial_viscosity := info.q_new(region_element);
          end;
       end loop;
       --x    CalcSoundSpeedForElems(domain,

@@ -1,5 +1,7 @@
 package LULESH.Comm is
 
+   type Domain_Member is private;
+
    --- // lulesh-comm
 
    --x void CommRecv(Domain& domain, Int_t msgType, Index_t xferFields,
@@ -44,5 +46,9 @@ package LULESH.Comm is
    procedure MonoQ
      (domain : in out Domain_Record);
 
+
+private
+
+   type Domain_Member is new Integer;
 
 end LULESH.Comm;
