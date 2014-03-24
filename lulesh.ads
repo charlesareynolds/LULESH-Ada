@@ -71,24 +71,52 @@ package LULESH is
 
    type Index_Type is new Natural;
    subtype Real_Type is real8;
+   
+   function MAX (L, R : in Index_Type) return Index_Type is
+     (if L > R then L else R)
+   with Inline;
 
    type Int_t is new Integer;
 
    type Balance_Type is new Natural;
 
    type Cost_Type is new Natural;
+
+   --- // MPI Message Tags
+   --x #define MSG_COMM_SBN      1024
+   --x #define MSG_SYNC_POS_VEL  2048
+   --x #define MSG_MONOQ         3072
+   MSG_COMM_SBN     : constant := 2#0010_0000_0000#;
+   MSG_SYNC_POS_VEL : constant := 2#0100_0000_0000#;
+   MSG_MONOQ        : constant := 2#0110_0000_0000#;
+
+   --x #define MAX_FIELDS_PER_MPI_COMM 6
+   MAX_FIELDS_PER_MPI_COMM : constant := 6;
+
+   --- // Assume 128 byte coherence
+   --- // Assume Real_t is an "integral power of 2" bytes wide
+   --x #define CACHE_COHERENCE_PAD_REAL (128 / sizeof(Real_t))
+   Byte_Size                : constant := 8;
+   Real_Byte_Size           : constant := Real_Type'Size / Byte_Size;
+   CACHE_COHERENCE_PAD_REAL : constant := 128 / Real_Byte_Size;
+
+   --x #define CACHE_ALIGN_REAL(n) \
+   --x    (((n) + (CACHE_COHERENCE_PAD_REAL - 1)) & ~(CACHE_COHERENCE_PAD_REAL-1))
+   --- Declared above derived Index_Type declarations so they inherit this:
+   --- Round up to a whole multiple of CACHE_COHERENCE_PAD_REAL:
+   function CACHE_ALIGN_REAL (This : in Index_Type) return Index_Type is
+     (((This + CACHE_COHERENCE_PAD_REAL - 1) / CACHE_COHERENCE_PAD_REAL) * 
+        CACHE_COHERENCE_PAD_REAL)
+       with Inline;
+
    ---------------------------------------
 
-   type Domain_Index is new Index_Type;
-
-   type Element_Index is new Index_Type;
+   type Domain_Index     is new Index_Type;
+   type Element_Index    is new Index_Type;
    subtype Element_Count is Element_Index;
-
-   type Node_Index is new Index_Type;
-
-   type Region_Index is new Index_Type;
-
-   type Thread_Index is new Index_Type;
+   type Node_Index       is new Index_Type;
+   type Region_Index     is new Index_Type;
+   type Thread_Index     is new Index_Type;
 
    subtype Process_ID_Type is MPI.Rank_Type;
    subtype Rank_Type is MPI.Rank_Type;
@@ -109,7 +137,7 @@ package LULESH is
    type Face_Range is new Index_Type range 0 .. FACES_PER_ELEMENT - 1;
 
    type Real_Array is array (Index_Type range <>) of Real_Type;
-   --     type Real_Array_Access is access Real_Array;
+   type Real_Array_Access is access Real_Array;
 
    type Element_Real_Array is array (Element_Index range <>) of Real_Type;
 
@@ -241,6 +269,9 @@ package LULESH is
    function CBRT
      (This : in real10) return real10 is
      (real10_Elementary_functions."**" (This, 1.0 / 3.0));
+   function CBRT
+     (This : in Mks_Type) return Mks_Type is
+     (Mks_Type_Elementary_Functions."**" (This, 1.0 / 3.0));
    --x inline real4  FABS(real4  arg) { return fabsf(arg) ; }
    --x inline real8  FABS(real8  arg) { return fabs(arg) ; }
    --x inline real10 FABS(real10 arg) { return fabsl(arg) ; }
@@ -271,26 +302,6 @@ package LULESH is
    --x #define ZETA_P_SYMM 0x08000
    --x #define ZETA_P_FREE 0x10000
    --x #define ZETA_P_COMM 0x20000
-
-   --- // MPI Message Tags
-   --x #define MSG_COMM_SBN      1024
-   --x #define MSG_SYNC_POS_VEL  2048
-   --x #define MSG_MONOQ         3072
-   MSG_COMM_SBN     : constant := 2#0010_0000_0000#;
-   MSG_SYNC_POS_VEL : constant := 2#0100_0000_0000#;
-   MSG_MONOQ        : constant := 2#0110_0000_0000#;
-
-   --x #define MAX_FIELDS_PER_MPI_COMM 6
-   MAX_FIELDS_PER_MPI_COMM : constant := 6;
-
-   --- // Assume 128 byte coherence
-   --- // Assume Real_t is an "integral power of 2" bytes wide
-   --x #define CACHE_COHERENCE_PAD_REAL (128 / sizeof(Real_t))
-   Byte_Size                : constant := 8;
-   CACHE_COHERENCE_PAD_REAL : constant := 128 / (Real_Type'Size / Byte_Size);
-
-   -- #define CACHE_ALIGN_REAL(n) \
---    (((n) + (CACHE_COHERENCE_PAD_REAL - 1)) & ~(CACHE_COHERENCE_PAD_REAL-1))
 
    --- //////////////////////////////////////////////////////
    --- // Primary data structure
@@ -344,20 +355,6 @@ package LULESH is
 --       (this.nodeElemCornerList(this.nodeElemStart(idx)..this.nodeElemStart(idx+1)))
 --     with inline;
 
-   --    //
-   --    // MPI-Related additional data
-   --    //
-
-   -- #if USE_MPI
-   --    // Communication Work space
-   --    Real_t *commDataSend ;
-   --    Real_t *commDataRecv ;
-
-   --    // Maximum number of block neighbors
-   --    MPI_Request recvRequest[26] ; // 6 faces + 12 edges + 8 corners
-   --    MPI_Request sendRequest[26] ; // 6 faces + 12 edges + 8 corners
-   -- #endif
-
    --   private:
    --- International System of Units:
 --SI   type SI_Type is new Real_Type;
@@ -400,7 +397,15 @@ package LULESH is
 --SI   subtype Velocity     is Meters_Per_Second;
 --SI   subtype Volume       is Cubic_Meters;
 
-   subtype Compression_Type is Mks_Type 
+   --- Multiply a dimensionless quantity by one of these to get a dimensioned quantity:
+   m2 : constant Area   := Area (1.0);
+   m3 : constant Volume := Volume (1.0);
+   mps : constant Velocity := Velocity (1.0);
+   mps2 : constant Acceleration := Acceleration (1.0);
+   kgpm3 : constant Density := Density (1.0);
+   
+   --- one over Volume:
+   subtype Compression is Mks_Type 
    with Dimension => (Meter => -3, others => 0);
    
    subtype Dimensionless is Mks_Type;
@@ -413,17 +418,22 @@ package LULESH is
 
    subtype Relative_Change is Dimensionless;
 
-   subtype VDOV_Type is Dimensionless;
-
 --SI     function "/"(L : in Relative_Change; R : in VDOV_Type) return Time_Span is
 --SI       (ART.To_Time_Span(Duration(Real_Type(L)*Real_Type(R))))
 --SI     with inline;
 
    function To_Time_Span
      (this : in Real_Type) return Time_Span is
-     (Time_Span (this)) with
-      Inline;
---SI     function To_Time_Span (this : in Real_Type) return Time_Span is
+     (Time_Span (this)) 
+   with Inline;
+   
+   Time_First      : constant Time;
+   Time_Last       : constant Time;
+   Time_Span_First : constant Time_Span;
+   Time_Span_Last  : constant Time_Span;
+   Time_Span_Zero  : constant Time_Span;
+   
+   --SI     function To_Time_Span (this : in Real_Type) return Time_Span is
 --SI       (ART.To_Time_Span(Duration(this)));
 
    --- Provides matrix and vector math:
@@ -494,8 +504,6 @@ package LULESH is
    type Cartesian_Natural_Length_Array is
      array (Cartesian_Axes, Natural_Axes) of Length;
 
-   type Symmetry_Node_Array is array (Cartesian_Axes) of Node_Index;
-
    type Cartesian_Natural_Real_Array is
      array (Cartesian_Axes, Natural_Axes) of Real_Type;
 
@@ -509,7 +517,7 @@ package LULESH is
    --     type Derivative_Array is array (Derivatives_Range) of C_Coordinate_Vector;
 
    type Element_Compression_Array is
-     array (Element_Index range <>) of Compression_Type;
+     array (Element_Index range <>) of Compression;
 
    type Element_Compression_Array_Access is access Element_Compression_Array;
    procedure Release is new Ada.Unchecked_Deallocation
@@ -554,10 +562,6 @@ package LULESH is
       --x    std::vector<Real_t> m_y ;
       --x    std::vector<Real_t> m_z ;
       coordinate : Coordinate_Vector;
-      --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
-      --x    std::vector<Index_t> m_symmY ;
-      --x    std::vector<Index_t> m_symmZ ;
-      symmetry_plane_nodes : Symmetry_Node_Array;
       --x    std::vector<Real_t> m_xd ; /* velocities */
       --x    std::vector<Real_t> m_yd ;
       --x    std::vector<Real_t> m_zd ;
@@ -575,7 +579,6 @@ package LULESH is
    end record;
 
    type Node_Array is array (Node_Index range <>) of Node_Record;
-
    type Node_Array_Access is access Node_Array;
 
    type MP_Type is (M, P);
@@ -583,7 +586,6 @@ package LULESH is
    type Connectivity_Array is array (Natural_Axes, MP_Type) of Element_Index;
 
    type Boundary_Condition_Type is (Symm, Free, Common);
-
    type Boundary_Condition_Array is
      array (Natural_Axes, MP_Type, Boundary_Condition_Type) of Boolean with
         Pack;
@@ -621,33 +623,33 @@ package LULESH is
       --x    std::vector<Real_t> m_ql ;  /* linear term for q */
       --x    std::vector<Real_t> m_qq ;  /* quadratic term for q */
       epressure                      : Pressure;
-      artificial_viscosity           : Pressure;
-      artificial_viscosity_linear    : Pressure;
-      artificial_viscosity_quadratic : Pressure;
+      artificial_viscosity           : Dimensionless;
+      artificial_viscosity_linear    : Dimensionless;
+      artificial_viscosity_quadratic : Dimensionless;
 --        stress_integrated          : Force_Vector;
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
-   --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
+      --x    std::vector<Real_t> m_vnew ;  /* new relative volume -- temporary */
       --x    std::vector<Real_t> m_delv ;  /* m_vnew - m_v */
       --x    std::vector<Real_t> m_vdov ;  /* volume derivative over volume */
-      volume_relative               : Volume;
+      volume_relative               : Dimensionless;
       volume_reference              : Volume;
       new_volume_relative           : Volume;
       new_volume_relative_delta     : Volume;
-      volume_derivative_over_volume : VDOV_Type;
+      --!! delta relative volume over reference volume?  delv/volo?:
+      volume_derivative_over_volume : Compression;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
-      characteristic_length : Length;
+      characteristic_length         : Length;
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
-      sound_speed : Velocity;
+      sound_speed                   : Velocity;
       --x    std::vector<Real_t> m_elemMass ;  /* mass */
       --x    // Element mass
-      emass : Mass;
+      emass                         : Mass;
       --x    Index_t *m_regNumList ;    // Region number per domain element
       region_number : Region_Index;
    end record;
 
    type Element_Array is array (Element_Index range <>) of Element_Record;
-
    type Element_Array_Access is access Element_Array;
 
    type Region_Record is record
@@ -658,9 +660,17 @@ package LULESH is
    end record;
 
    type Region_Array is array (Region_Index range <>) of Region_Record;
-
    type Region_Array_Access is access Region_Array;
 
+   ---    // Maximum number of block neighbors
+   --- // 6 faces + 12 edges + 8 corners
+   MAXIMUM_BLOCK_NEIGHBORS : constant := 26;
+   type MPI_REQUEST_ARRAY is array (0 .. MAXIMUM_BLOCK_NEIGHBORS) of MPI.Request;
+   
+   type Node_Index_Array is array (Node_Index range <>) of Node_Index;
+   type Node_Index_Array_Access is access Node_Index_Array;
+   type Symmetry_Plane_Nodes_Array is array (Cartesian_Axes) of Node_Index_Array_Access;
+   
    type Variables_Record is record
       ---    // Variables to keep track of timestep, simulation time, and cycle
       --x    Real_t  m_dtcourant ;         // courant constraint
@@ -706,8 +716,8 @@ package LULESH is
 
       --x    Index_t m_maxPlaneSize ;
       --x    Index_t m_maxEdgeSize ;
-      maxPlaneSize : Element_Index;
-      maxEdgeSize  : Element_Index;
+      maxPlaneSize : Node_Index;
+      maxEdgeSize  : Node_Index;
 
       ---    // Used in setup
       --x    Index_t m_rowMin, m_rowMax;
@@ -719,6 +729,28 @@ package LULESH is
       colMax   : Element_Index;
       planeMin : Element_Index;
       planeMax : Element_Index;
+      
+      --x    std::vector<Index_t> m_symmX ;  /* symmetry plane nodesets */
+      --x    std::vector<Index_t> m_symmY ;
+      --x    std::vector<Index_t> m_symmZ ;
+      symmetry_plane_nodes : Symmetry_Plane_Nodes_Array;
+
+      ---    //
+      ---    // MPI-Related additional data
+      ---    //
+
+      -- #if USE_MPI
+      ---    // Communication Work space
+      --x    Real_t *commDataSend ;
+      --x    Real_t *commDataRecv ;
+      CommDataSend : Real_Array_Access;
+      CommDataRecv : Real_Array_Access;
+      ---    // Maximum number of block neighbors
+      --x    MPI_Request recvRequest[26] ; // 6 faces + 12 edges + 8 corners
+      --x    MPI_Request sendRequest[26] ; // 6 faces + 12 edges + 8 corners
+      RecvRequest : MPI_Request_Array;
+      SendRequest : MPI_Request_Array;
+      -- #endif
    end record;
 
    type Parameters_Record is record
@@ -733,12 +765,11 @@ package LULESH is
       ---    const Real_t  m_u_cut ;             // velocity tolerance
       energy_tolerance               : Energy;
       pressure_tolerance             : Pressure;
-      artificial_viscosity_tolerance : Pressure;
-      volume_relative_tolerance      : Volume;
+      artificial_viscosity_tolerance : Dimensionless;
+      volume_relative_tolerance      : Dimensionless;
       velocity_tolerance             : Velocity;
 
-   ---    // Other constants (usually setable, but hardcoded in this proxy app)
-
+      ---    // Other constants (usually setable, but hardcoded in this proxy app)
       ---    const Real_t  m_hgcoef ;            // hourglass control
       ---    const Real_t  m_ss4o3 ;
       ---    const Real_t  m_qstop ;             // excessive q indicator
@@ -751,25 +782,25 @@ package LULESH is
       ---    const Real_t  m_eosvmin ;
       ---    const Real_t  m_pmin ;              // pressure floor
       ---    const Real_t  m_emin ;              // energy floor
----    const Real_t  m_dvovmax ;           // maximum allowable volume change
+      ---    const Real_t  m_dvovmax ;           // maximum allowable volume change
       ---    const Real_t  m_refdens ;           // reference density
-      hgcoef             : Real_Type;
-      four_thirds        : Real_Type;
-      qstop              : Pressure;
-      monoq_max_slope    : Real_Type;
-      monoq_limiter_mult : Real_Type;
-      qlc_monoq          : Real_Type;
-      qqc_monoq          : Real_Type;
-      qqc                : Real_Type;
+      hgcoef             : Dimensionless;
+      four_thirds        : Dimensionless;
+      qstop              : Dimensionless;
+      monoq_max_slope    : Dimensionless;
+      monoq_limiter_mult : Dimensionless;
+      qlc_monoq          : Dimensionless;
+      qqc_monoq          : Dimensionless;
+      qqc                : Dimensionless;
       eosvmax            : Volume;
       eosvmin            : Volume;
       pressure_floor     : Pressure;
       energy_floor       : Energy;
-      dvovmax            : Relative_Change;
+      dvovmax            : Compression;
 --        volume_delta_max   : Volume;
-      reference_density : Density;
+      reference_density  : Density;
       --x    Int_t    m_cost; //imbalance cost
-      imbalance_cost : Cost_Type;
+      imbalance_cost     : Cost_Type;
 
       --x    Index_t m_sizeX ;
       --x    Index_t m_sizeY ;
@@ -784,9 +815,12 @@ package LULESH is
 --     type Domain_member is access all Real_Type;
 
 private
-
-   Time_Span_Last : constant Time_Span := Time_Span'Last;
-
+   Time_Span_First : constant Time_Span := Time_Span'First;
+   Time_Span_Last  : constant Time_Span := Time_Span'Last;
+   Time_Span_Zero  : constant Time_Span := 0.0 * s;
+   Time_First      : constant Time := Time_Span_Zero;
+   Time_Last       : constant Time := Time_Span_Last;
+   
 --SI     function "*" (Left : Time_Span; Right : Real_Type) return Time_Span is
 --       (ART.To_Time_Span (ART.To_Duration(Left) * Duration (Right)))
 --     with Inline;

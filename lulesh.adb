@@ -354,7 +354,7 @@ package body LULESH is
          stress_integrated (element) :=
            (others => Pressure'Base
               (- domain.elements(element).epressure
-               - domain.elements(element).artificial_viscosity));
+               - Pressure (domain.elements(element).artificial_viscosity)));
            pragma Warnings (On, "redundant conversion, expression is of type ""MKS_TYPE""");
       end loop;
       --x }
@@ -1411,11 +1411,11 @@ package body LULESH is
             --       Real_t *sigyy  = Allocate<Real_t>(numElem) ;
             --       Real_t *sigzz  = Allocate<Real_t>(numElem) ;
             --       Real_t *determ = Allocate<Real_t>(numElem) ;
-            hgcoef            : Real_Type := domain.parameters.hgcoef;
+            hgcoef            : Dimensionless := domain.parameters.hgcoef;
             stress_integrated : Element_Pressure_Vector_Array_Access  :=
-              new Element_Pressure_Vector_Array (0..numElem - 1);
-            determinants            : Element_Determinant_Array_Access :=
-              new Element_Determinant_Array (0..numElem - 1);
+              new Element_Pressure_Vector_Array (0 .. numElem - 1);
+            determinants      : Element_Determinant_Array_Access :=
+              new Element_Determinant_Array (0 .. numElem - 1);
          begin
             ---       /* Sum contributions to total stress tensor */
             --x       InitStressTermsForElems(domain, sigxx, sigyy, sigzz, numElem);
@@ -1649,7 +1649,7 @@ package body LULESH is
    --- /******************************************/
 
    type EOS_Element_Info_Record is record
-      bvc          : Mks_Type;
+      bvc          : Dimensionless;
       compHalfStep : Compression_Type;
       compressionn : Compression_Type;
       delvc        : Volume;
@@ -1657,15 +1657,18 @@ package body LULESH is
       e_old        : Energy;
       p_new        : Pressure;
       p_old        : Pressure;
-      pbvc         : Mks_Type;
-      q_new        : Pressure;
-      q_old        : Pressure;
-      ql_old       : Pressure;
-      qq_old       : Pressure;
+      pbvc         : Dimensionless;
+      q_new        : Dimensionless;
+      q_old        : Dimensionless;
+      ql_old       : Dimensionless;
+      qq_old       : Dimensionless;
       work         : Energy;
    end record;
    type EOS_Element_Info_Array is array (Element_Index range <>) of EOS_Element_Info_Record;
    type EOS_Element_Info_Array_Access is access EOS_Element_Info_Array;
+   procedure Release is new Ada.Unchecked_Deallocation
+     (EOS_Element_Info_Array,
+      EOS_Element_Info_Array_Access);
 
    type EOS_Info_Record (numElem : Element_Count) is record
       elements : EOS_Element_Info_Array_Access := new EOS_Element_Info_Array (0 .. numElem - 1);
@@ -1677,7 +1680,7 @@ package body LULESH is
       pmin     : Pressure;
       q_cut    : Pressure;
       rho0     : Density;
-      ss4o3    : Mks_Type;
+      ss4o3    : Dimensionless;
    end record;
 
    -- /******************************************/
@@ -2474,7 +2477,8 @@ package body LULESH is
       for element in info.elements'Range loop
          info.elements (element).e_new :=
            info.elements (element).e_old  -
-           0.5 * info.elements (element).delvc * (info.elements (element).p_old + info.elements (element).q_old)
+           0.5 * info.elements (element).delvc * (info.elements (element).p_old
+                                                  + Pressure(info.elements (element).q_old))
            + 0.5 * info.elements (element).work;
          if info.elements (element).e_new < info.emin then
             info.elements (element).e_new := info.emin;
@@ -2507,10 +2511,11 @@ package body LULESH is
       for element in info.elements'Range loop
          declare
             elem  : EOS_Element_Info_Record renames info.elements (element);
-            vhalf : constant Volume := Volume (1.0 / (1.0 + elem.compHalfStep));
+            vhalf : constant Volume := Volume
+              (1.0 / (Compression_Type (1.0) + elem.compHalfStep));
          begin
             if elem.delvc > Volume (0.0) then
-               elem.q_new := Pressure (0.0);
+               elem.q_new := 0.0;
             else
                declare
                   ssc : Mks_Type :=
@@ -2528,8 +2533,8 @@ package body LULESH is
                end;
             end if;
             elem.e_new := elem.e_new + 0.5 * elem.delvc
-              * (3.0*(elem.p_old + elem.q_old)
-                 - 4.0*(pHalfStep (element) + elem.q_new));
+              * (3.0*(elem.p_old + Pressure(elem.q_old))
+                 - 4.0*(pHalfStep (element) + Pressure(elem.q_new)));
          end;
      end loop;
 
@@ -2777,7 +2782,7 @@ package body LULESH is
                info_element : EOS_Element_Info_Record renames
                  info.elements (region_element_index);
                function To_Compression (this : in Volume) return Compression_Type is
-                 (Volume (1.0) / this - Compression_Type (1.0));
+                 (Dimensionless (1.0) / this - Compression_Type (1.0));
             begin
                info_element.compressionn := To_Compression (vnewc (element));
                vchalf := vnewc (element) - info_element.delvc * 0.5;
@@ -2805,19 +2810,19 @@ package body LULESH is
          --x                }
          --x             }
          --x          }
-         if info.eosvmin /= 0.0 then
+         if info.eosvmin /= Volume (0.0) then
             for region_element_index in regElemList'Range loop
                if vnewc(regElemList(region_element_index))  <= info.eosvmin then ---/* impossible due to calling func? */
                     info.elements (region_element_index).compHalfStep := info.elements (region_element_index).compressionn;
                end if;
             end loop;
          end if;
-         if info.eosvmax /= 0.0 then
+         if info.eosvmax /= Volume (0.0) then
             for region_element_index in regElemList'Range loop
                if vnewc(regElemList(region_element_index)) >= info.eosvmax then ---/* impossible due to calling func? */
-                  info.elements (region_element_index).p_old        := 0.0;
-                  info.elements (region_element_index).compressionn := 0.0;
-                  info.elements (region_element_index).compHalfStep := 0.0;
+                  info.elements (region_element_index).p_old        := Pressure (0.0);
+                  info.elements (region_element_index).compressionn := Compression (0.0);
+                  info.elements (region_element_index).compHalfStep := Compression (0.0);
                end if;
             end loop;
          end if;
@@ -2833,7 +2838,9 @@ package body LULESH is
          --x                          p_cut, e_cut, q_cut, emin,
          --x                          qq_old, ql_old, rho0, eosvmax,
          --x                          numElemReg, regElemList);
-         info.work.all := (others =>0.0);
+         for Element in Info.Elements'Range loop
+         info.Elements (Element).Work := Energy (0.0);
+         end loop;
          CalcEnergyForElems (domain, vnewc, info, regElemList);
          --x    }
       end loop;
@@ -3139,7 +3146,7 @@ package body LULESH is
       --x       Real_t   qqc2 = Real_t(64.0) * qqc * qqc ;
       --x       Real_t   dtcourant_tmp = dtcourant;
       --x       Index_t  courant_elem  = -1 ;
-      qqc2          : constant Real_Type := 64.0 * domain.parameters.qqc**2;
+      qqc2          : constant Dimensionless := 64.0 * domain.parameters.qqc**2;
       dtcourant_tmp : Time_Span := domain.variables.dtcourant;
       -- Picking an unlikely number instead of -1:
       NEVER_SET     : constant Element_Count := 2_000_000_003;
@@ -3151,7 +3158,6 @@ package body LULESH is
       --x       Index_t thread_num = 0;
       thread_num : constant Thread_Index := 0;
       -- #endif
-      use type ART.Time_Span;
    begin
       -- #pragma omp for
       --x       for (Index_t i = 0 ; i < length ; ++i) {
@@ -3168,21 +3174,18 @@ package body LULESH is
          declare
             element : constant Element_Index :=
               domain.regions(region).elements(region_element_index);
-            dtf     : Time_Span :=
-              ART.Time_Span_Last;
-            ss      : constant Real_Type := Real_Type
-              (domain.elements(element).sound_speed);
-            vdov    : constant Real_Type := Real_Type
-              (domain.elements(element).volume_derivative_over_volume);
-            arealg  : constant Real_Type := Real_Type
-              (domain.elements(element).characteristic_length);
+            dtf     : Time_Span := Time_Span_Last;
+            ss      : constant Velocity :=
+              Domain.elements (element).Sound_Speed;
+            vdov    : constant Compression :=
+              Domain.Elements (element).Volume_Derivative_Over_Volume;
+            arealg  : constant Length :=
+              Domain.Elements (element).Characteristic_Length;
          begin
-            if vdov < 0.0 then
-               dtf := To_Time_Span
-                 (arealg / SQRT(ss**2 + qqc2 * arealg**2 * vdov**2));
+            if vdov < Compression (0.0) then
+               dtf := Arealg / SQRT(ss**2 + qqc2 * arealg**2 * vdov**2);
             else
-               dtf := To_Time_Span
-                 (arealg / abs(ss));
+               dtf := Arealg / abs(ss);
             end if;
             --x          if (domain.vdov(indx) != Real_t(0.)) {
             --x             if ( dtf < dtcourant_tmp ) {
@@ -3191,7 +3194,7 @@ package body LULESH is
             --x             }
             --x          }
             --x       }
-            if vdov /= 0.0 and then dtcourant_tmp > dtf then
+            if vdov /= Compression (0.0) and then dtcourant_tmp > dtf then
                dtcourant_tmp := dtf;
                courant_elem  := element;
             end if;
@@ -3267,7 +3270,6 @@ package body LULESH is
       --x       Index_t thread_num = 0;
       thread_num : constant Thread_Index := 0;
       -- #endif
-      use type ART.Time_Span;
    begin
       -- #pragma omp for
       --x       for (Index_t i = 0 ; i < length ; ++i) {
@@ -3284,14 +3286,15 @@ package body LULESH is
          declare
             element : constant Element_Index :=
               domain.regions(region).elements(region_element_index);
-            vdov : VDOV_Type renames
+            vdov    : constant Compression :=
               domain.elements(element).volume_derivative_over_volume;
          begin
-            if vdov /= 0.0 then
+            if vdov /= Compression (0.0) then
                declare
                   --- dvovmax/vdov=(dv/vmax)/(vd/v)=(dv*v)/(vmax*vd)=dv/vd
-                  dtdvov : constant Time_Span :=
-                    domain.parameters.dvovmax / (abs(vdov)+1.0e-20);
+                  Vdov_A : constant Compression := (abs (Vdov)+Compression (1.0e-20));
+                  dtdvov : constant Time_Span := Time_Span (
+                    domain.parameters.dvovmax / Vdov_A);
                begin
                   if dthydro_tmp > dtdvov then
                      dthydro_tmp := dtdvov;
@@ -3338,8 +3341,8 @@ package body LULESH is
       ---    // Initialize conditions to a very large value
       --x    domain.dtcourant() = 1.0e+20;
       --x    domain.dthydro() = 1.0e+20;
-      domain.variables.dtcourant := ART.Time_Span_Last;
-      domain.variables.dthydro := ART.Time_Span_Last;
+      domain.variables.dtcourant := Time_Span_Last;
+      domain.variables.dthydro := Time_Span_Last;
       --x    for (Index_t r=0 ; r < domain.numReg() ; ++r) {
       --x       /* evaluate time constraint */
       --x       CalcCourantConstraintForElems(domain, domain.regElemSize(r),

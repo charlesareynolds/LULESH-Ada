@@ -21,13 +21,13 @@ package body LULESH.Init is
 
       -- Returns an integer between Min and Max:
       function Choose
-        (Min : in Integer;
-         Max : in integer)
+        (Minimum : in Integer;
+         Maximum : in integer)
          return Integer
         with
-          post => (Choose'Result in Min..Max);
+          post => (Choose'Result in Minimum..Maximum);
 
-      -- Returns an integer between 0 and Modulo - 1:
+      --- Returns an integer between 0 and Modulo - 1:
       function Choose_Rem
         (Modulo : in Integer)
          return Integer is
@@ -39,11 +39,11 @@ package body LULESH.Init is
       package ANFR renames Ada.Numerics.Float_Random;
       Generator : ANFR.Generator;
       function Choose
-        (Min : in Integer;
-         Max : in integer)
+        (Minimum : in Integer;
+         Maximum : in integer)
          return Integer is
       begin
-         return Integer(Float(ANFR.Random (Generator)) * Float (Max - Min)) + Min;
+         return Integer(Float(ANFR.Random (Generator)) * Float (Maximum - Minimum)) + Minimum;
       end Choose;
    begin
       ANFR.Reset(Generator);
@@ -210,11 +210,11 @@ package body LULESH.Init is
       --x    m_refdens(Real_t(1.0))
       --x {
       this.parameters :=
-        (energy_tolerance           => 1.0e-7,
-         pressure_tolerance         => 1.0e-7,
+        (energy_tolerance           => 1.0e-7 * J,
+         pressure_tolerance         => 1.0e-7 * Pa,
          artificial_viscosity_tolerance => 1.0e-7,
          volume_relative_tolerance  => 1.0e-10,
-         velocity_tolerance         => 1.0e-7,
+         velocity_tolerance         => 1.0e-7 * mps,
          hgcoef                     => 3.0,
          four_thirds                => 4.0/3.0,
          qstop                      => 1.0e+12,
@@ -223,12 +223,12 @@ package body LULESH.Init is
          qlc_monoq                  => 0.5,
          qqc_monoq                  => 2.0/3.0,
          qqc                        => 2.0,
-         eosvmax                    => 1.0e+9,
-         eosvmin                    => 1.0e-9,
-         pressure_floor             => 0.0,
-         energy_floor               => -1.0e+15,
-         dvovmax                     => 0.1,
-         reference_density          => 1.0,
+         eosvmax                    => 1.0e+9 * m3,
+         eosvmin                    => 1.0e-9 * m3,
+         pressure_floor             => 0.0 * Pa,
+         energy_floor               => -1.0e+15 * J,
+         dvovmax                    => 0.1,
+         reference_density          => 1.0 * kgpm3,
          --x    this->cost() = cost;
          imbalance_cost             => cost,
          --x    m_sizeX = edgeElems ;
@@ -282,10 +282,10 @@ package body LULESH.Init is
       --x       v(i) = Real_t(1.0) ;
       --x    }
       for index in 0..this.numElem-1 loop
-         this.elements(index).eenergy              := 0.0;
-         this.elements(index).epressure             := 0.0;
+         this.elements(index).eenergy              := 0.0 * J;
+         this.elements(index).epressure            := 0.0 * Pa;
          this.elements(index).artificial_viscosity := 0.0;
-         this.elements(index).sound_speed          := 0.0;
+         this.elements(index).sound_speed          := 0.0 * mps;
          this.elements(index).volume_relative      := 1.0;
       end loop;
       --x    for (Index_t i=0; i<numNode(); ++i) {
@@ -302,9 +302,9 @@ package body LULESH.Init is
       --x       nodalMass(i) = Real_t(0.0) ;
       --x    }
       for index in 0..this.numNode-1 loop
-         this.nodes(index).velocity     := (others => 0.0);
-         this.nodes(index).acceleration := (others => 0.0);
-         this.nodes(index).nmass := 0.0;
+         this.nodes(index).velocity     := (others => 0.0 * mps);
+         this.nodes(index).acceleration := (others => 0.0 * mps2);
+         this.nodes(index).nmass := 0.0 * kg;
       end loop;
 
       --x    BuildMesh(nx, edgeNodes, edgeElems);
@@ -341,10 +341,9 @@ package body LULESH.Init is
 
       --x    dtfixed() = Real_t(-1.0e-6) ; // Negative means use courant condition
       --x    stoptime()  = Real_t(1.0e-2); // *Real_t(edgeElems*tp/45.0) ;
-      this.variables.dtfixed  := ART.Time_Span_Last;
+      this.variables.dtfixed  := Time_Span_Last;
       this.variables.use_courant_condition  := True;
-      this.variables.stoptime := ART."+"
-        (ART.Time_First, ART.To_Time_Span(Duration(1.0e-2)));
+      this.variables.stoptime := Time_First + 1.0e-2 * s;
 
       ---    // Initial conditions
       --x    deltatimemultlb() = Real_t(1.1) ;
@@ -356,10 +355,10 @@ package body LULESH.Init is
       --x    cycle()   = Int_t(0) ;
       this.variables.delta_time_multiplier_lower_bound := 1.1;
       this.variables.delta_time_multiplier_upper_bound := 1.2;
-      this.variables.dtcourant       := ART.Time_Span_Last;
-      this.variables.dthydro         := ART.Time_Span_Last;
-      this.variables.dtmax           := ART.To_Time_Span(Duration(1.0e-2));
-      this.variables.current_time    := ART.Time_First;
+      this.variables.dtcourant       := Time_Span_Last;
+      this.variables.dthydro         := Time_Span_Last;
+      this.variables.dtmax           := 1.0e-2 * s;
+      this.variables.current_time    := Time_First;
       this.variables.cycle           := 0;
 
       ---    // initialize field data
@@ -395,8 +394,8 @@ package body LULESH.Init is
             declare
                element_volume : constant Volume :=
                  LULESH.Par.CalcElemVolume (local_coords);
-               mass_share     : constant Mass :=
-                 Mass(element_volume) / Mass(NODES_PER_ELEMENT);
+               mass_share     : constant Mass := Mass
+                 (Element_Volume / Dimensionless (NODES_PER_ELEMENT));
             begin
                this.elements(element).volume_reference := element_volume;
                this.elements(element).emass := Mass(element_volume);
@@ -425,56 +424,58 @@ package body LULESH.Init is
       --x       e(0) = einit;
       --x    }
       declare
-         ebase : constant Energy := 3.948746e+7;
-         scale : constant Real_Type   :=
-           Real_Type(side_length)*Real_Type(this.variables.tp)/45.0;
-         einit : constant Energy := ebase*Energy(scale**3);
+         Ebase : constant Energy := 3.948746e+7 * J;
+         Scale : constant Dimensionless   :=
+           Dimensionless (Side_Length) * Dimensionless (This.Variables.Tp) / 45.0;
+         Einit : constant Energy := Ebase * Scale ** 3;
       begin
-         if (this.variables.rowLoc
-             + this.variables.colLoc
-             + this.variables.planeLoc = 0) then
-            this.elements(0).eenergy := einit;
+         if (This.Variables.RowLoc
+             + This.Variables.ColLoc
+             + This.Variables.PlaneLoc = 0) then
+            This.Elements (0).Eenergy := Einit;
          end if;
          ---    //set initial deltatime base on analytic CFL calculation
          --x    deltatime() = (Real_t(.5)*cbrt(volo(0)))/sqrt(Real_t(2.0)*einit);
-         this.variables.deltatime := ART.To_Time_Span
-           (Duration
-              ((0.5*cbrt(real10(this.elements(0).volume_reference)))/
-                   sqrt(2.0*real10(einit))));
+         This.Variables.Deltatime := Time (
+           ((0.5 *  Cbrt (Dimensionless (This.Elements (0).Volume_Reference))) /
+               Sqrt (2.0 * Dimensionless (Einit))));
+--             ((0.5 * Cbrt (Real10 (This.Elements (0).Volume_Reference))) /
+--                Sqrt (2.0 * Real10 (Einit))) * S;
       end;
       --x } // End constructor
       return this;
    end Create;
 
 
-   -- ////////////////////////////////////////////////////////////////////////////////
-   -- void
-   -- Domain::BuildMesh(Int_t nx, Int_t edgeNodes, Int_t edgeElems)
-   -- {
+   --- ////////////////////////////////////////////////////////////////////////////////
+   --x void
+   --x Domain::BuildMesh(Int_t nx, Int_t edgeNodes, Int_t edgeElems)
+   --x {
    procedure BuildMesh
      (this        : in out Domain_Record;
       side_length : in Element_Index;
       edgeNodes   : in Node_Index;
       edgeElems   : in Element_Index)
    is
+      subtype Edge_Elements_Range is Element_Index range 0..EdgeElems-1;
       subtype Edge_Nodes_Range is Node_Index range 0..edgeNodes-1;
       --x   Index_t meshEdgeElems = m_tp*nx ;
       ---   // initialize nodal coordinates
       --x   Index_t nidx = 0 ;
-      meshEdgeElems : constant Element_Index :=
-        Element_Index(this.variables.tp)*side_length ;
-      node          : Node_Index;
-      t             : Coordinate_Vector;
-      zidx          : Element_Index;
+      MeshEdgeElems : constant Element_Index :=
+        Element_Index (This.Variables.Tp) * Side_Length ;
+      Node          : Node_Index;
+      T             : Coordinate_Vector;
+      Zidx          : Element_Index;
 
       function Calc_T_Part
-        (loc  : in Domain_Index;
-         node : in Node_Index)
-         return Length is
-        (1.125 *
-           Length
-             ((Element_Index(loc)*side_length)+
-                  Element_Index(node)/meshEdgeElems))
+        (Loc   : in Domain_Index;
+         Nodee : in Node_Index)
+      --- Coordinate vector components aren't dimensioned, so:
+         return Dimensionless is
+        (1.125 * Dimensionless
+           ((Element_Index (Loc) * Side_Length)+
+                Element_Index (Nodee) / MeshEdgeElems))
         with Inline;
    begin
       --x   Real_t tz = Real_t(1.125)*Real_t(m_planeLoc*nx)/Real_t(meshEdgeElems) ;
@@ -498,12 +499,12 @@ package body LULESH.Init is
       --x   }
       node := 0;
       for plane in Edge_Nodes_Range loop
-         t(Z) := Calc_T_Part(this.variables.planeLoc, plane);
+         T (Z) := Calc_T_Part(this.variables.planeLoc, plane);
          for row in Edge_Nodes_Range loop
-            t(Y) := Calc_T_Part(this.variables.rowLoc, row);
+            T (Y) := Calc_T_Part(this.variables.rowLoc, row);
             for col in Edge_Nodes_Range loop
-               t(X) := Calc_T_Part(this.variables.colLoc, col);
-               this.nodes(node).coordinate := T;
+               T (X) := Calc_T_Part(this.variables.colLoc, col);
+               this.nodes (node).coordinate := T;
                node := node + 1;
             end loop;
          end loop;
@@ -533,9 +534,9 @@ package body LULESH.Init is
       --x   }
       zidx := 0 ;
       node := 0;
-      for plane in Edge_Nodes_Range loop
-         for row in Edge_Nodes_Range loop
-            for col in Edge_Nodes_Range loop
+      for plane in Edge_Elements_Range loop
+         for row in Edge_Elements_Range loop
+            for col in Edge_Elements_Range loop
                this.elements(zidx).node_indexes :=
                  (0 => node                                       ,
                   1 => node                                   + 1 ,
@@ -552,7 +553,7 @@ package body LULESH.Init is
          end loop;
          node := node + edgeNodes ;
       end loop;
-      -- }
+      --x }
    end BuildMesh;
 
    --x ////////////////////////////////////////////////////////////////////////////////
@@ -567,7 +568,7 @@ package body LULESH.Init is
    -- #else
    --x    Index_t numthreads = 1;
    -- #endif
-      numthreads         : Index_Type := 1;
+      numthreads         : constant Index_Type := 1;
       --- Number of elements each node is in. Interior nodes are in 8 elements,
       --- faces 4, edges 2, and corners 1:
       nodeElemCounts     : Node_Element_Index_Array_Access;
@@ -678,7 +679,7 @@ package body LULESH.Init is
                   clv : constant Element_Index :=
                     nodeElemCornerList(element);
                begin
-                  if not (clv in 0 .. max_clSize) then
+                  if Clv > Max_ClSize then
                      raise Coding_Error with
                        "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"&
                        "  i:" & element'Img & " clv:" & clv'Img;
@@ -716,68 +717,120 @@ package body LULESH.Init is
    end SetupThreadSupportStructures;
 
 
-   -- ////////////////////////////////////////////////////////////////////////////////
-   -- void
-   -- Domain::SetupCommBuffers(Int_t edgeNodes)
-   -- {
-   --   // allocate a buffer large enough for nodal ghost data
-   --   Index_t maxEdgeSize = MAX(this->sizeX(), MAX(this->sizeY(), this->sizeZ()))+1 ;
-   --   m_maxPlaneSize = CACHE_ALIGN_REAL(maxEdgeSize*maxEdgeSize) ;
-   --   m_maxEdgeSize = CACHE_ALIGN_REAL(maxEdgeSize) ;
+   --- ////////////////////////////////////////////////////////////////////////////////
+   --x void
+   --x Domain::SetupCommBuffers(Int_t edgeNodes)
+   --x {
+   ---   // allocate a buffer large enough for nodal ghost data
+   procedure SetupCommBuffers
+     (This      : in out Domain_Record;
+      EdgeNodes : in Node_Index)
+   is
+      TV : Variables_Record  renames This.Variables;
+   --x   Index_t maxEdgeSize = MAX(this->sizeX(), MAX(this->sizeY(), this->sizeZ()))+1 ;
+      MaxEdgeSize : constant Node_Index :=
+        Node_Index (MAX (This.Parameters.Size (X),
+             MAX (This.Parameters.Size (Y),
+               This.Parameters.Size (Z))) + 1);
+   begin
+   --x   m_maxPlaneSize = CACHE_ALIGN_REAL(maxEdgeSize*maxEdgeSize) ;
+   --x   m_maxEdgeSize = CACHE_ALIGN_REAL(maxEdgeSize) ;
+      TV.MaxPlaneSize := CACHE_ALIGN_REAL (MaxEdgeSize ** 2) ;
+      TV.MaxEdgeSize := CACHE_ALIGN_REAL (MaxEdgeSize) ;
+      ---   // assume communication to 6 neighbors by default
+      --x   m_rowMin = (m_rowLoc == 0)        ? 0 : 1;
+      --x   m_rowMax = (m_rowLoc == m_tp-1)     ? 0 : 1;
+      --x   m_colMin = (m_colLoc == 0)        ? 0 : 1;
+      --x   m_colMax = (m_colLoc == m_tp-1)     ? 0 : 1;
+      --x   m_planeMin = (m_planeLoc == 0)    ? 0 : 1;
+      --x   m_planeMax = (m_planeLoc == m_tp-1) ? 0 : 1;
+      TV.RowMin   := (if TV.RowLoc = 0 then 0 else 1);
+      TV.RowMax   := (if TV.RowLoc = TV.Tp - 1 then 0 else 1);
+      TV.ColMin   := (if TV.ColLoc = 0 then 0 else 1);
+      TV.ColMax   := (if TV.ColLoc = TV.Tp - 1 then 0 else 1);
+      TV.PlaneMin := (if TV.PlaneLoc = 0 then 0 else 1);
+      TV.PlaneMax := (if TV.PlaneLoc = TV.Tp - 1 then 0 else 1);
 
-   --   // assume communication to 6 neighbors by default
-   --   m_rowMin = (m_rowLoc == 0)        ? 0 : 1;
-   --   m_rowMax = (m_rowLoc == m_tp-1)     ? 0 : 1;
-   --   m_colMin = (m_colLoc == 0)        ? 0 : 1;
-   --   m_colMax = (m_colLoc == m_tp-1)     ? 0 : 1;
-   --   m_planeMin = (m_planeLoc == 0)    ? 0 : 1;
-   --   m_planeMax = (m_planeLoc == m_tp-1) ? 0 : 1;
+      --x #if USE_MPI
+      if USE_MPI then
+         declare
+            ---   // account for face communication
+            --x   Index_t comBufSize =
+            --x     (m_rowMin + m_rowMax + m_colMin + m_colMax + m_planeMin + m_planeMax) *
+            --x     m_maxPlaneSize * MAX_FIELDS_PER_MPI_COMM ;
+            ComBufSize : Index_Type :=
+              Index_Type (TV.RowMin + TV.RowMax + TV.ColMin + TV.ColMax + TV.PlaneMin + TV.PlaneMax) *
+              Index_Type (TV.MaxPlaneSize * MAX_FIELDS_PER_MPI_COMM) ;
+         begin
+            ---   // account for edge communication
+            --x   comBufSize +=
+            --x     ((m_rowMin & m_colMin) + (m_rowMin & m_planeMin) + (m_colMin & m_planeMin) +
+            --x      (m_rowMax & m_colMax) + (m_rowMax & m_planeMax) + (m_colMax & m_planeMax) +
+            --x      (m_rowMax & m_colMin) + (m_rowMin & m_planeMax) + (m_colMin & m_planeMax) +
+            --x      (m_rowMin & m_colMax) + (m_rowMax & m_planeMin) + (m_colMax & m_planeMin)) *
+            --x     m_maxPlaneSize * MAX_FIELDS_PER_MPI_COMM ;
+            ComBufSize := ComBufSize + Index_Type
+              ((TV.RowMin * TV.ColMin) + (TV.ColMin * TV.PlaneMin) + (TV.PlaneMin * TV.RowMin) +
+               (TV.RowMax * TV.ColMax) + (TV.ColMax * TV.PlaneMax) + (TV.PlaneMax * TV.RowMax) +
+               (TV.RowMax * TV.ColMin) + (TV.ColMin * TV.PlaneMax) + (TV.PlaneMax * TV.RowMin) +
+               (TV.RowMin * TV.ColMax) + (TV.ColMax * TV.PlaneMin) + (TV.PlaneMin * TV.RowMax)) *
+                Index_Type (TV.MaxPlaneSize * MAX_FIELDS_PER_MPI_COMM);
+            ---   // account for corner communication
+            ---   // factor of 16 is so each buffer has its own cache line
+            --x   comBufSize += ((m_rowMin & m_colMin & m_planeMin) +
+            --x 		 (m_rowMin & m_colMin & m_planeMax) +
+            --x 		 (m_rowMin & m_colMax & m_planeMin) +
+            --x 		 (m_rowMin & m_colMax & m_planeMax) +
+            --x 		 (m_rowMax & m_colMin & m_planeMin) +
+            --x 		 (m_rowMax & m_colMin & m_planeMax) +
+            --x 		 (m_rowMax & m_colMax & m_planeMin) +
+            --x 		 (m_rowMax & m_colMax & m_planeMax)) * CACHE_COHERENCE_PAD_REAL ;
+            ComBufSize := ComBufSize + Index_Type
+              ((TV.RowMin * TV.ColMin * TV.PlaneMin) +
+               (TV.RowMin * TV.ColMin * TV.PlaneMax) +
+               (TV.RowMin * TV.ColMax * TV.PlaneMin) +
+               (TV.RowMin * TV.ColMax * TV.PlaneMax) +
+               (TV.RowMax * TV.ColMin * TV.PlaneMin) +
+               (TV.RowMax * TV.ColMin * TV.PlaneMax) +
+               (TV.RowMax * TV.ColMax * TV.PlaneMin) +
+               (TV.RowMax * TV.ColMax * TV.PlaneMax)) *
+                Index_Type (CACHE_COHERENCE_PAD_REAL);
+            --x   this->commDataSend = new Real_t[comBufSize] ;
+            --x   this->commDataRecv = new Real_t[comBufSize] ;
+            TV.CommDataSend := new Real_Array (0..ComBufSize-1);
+            TV.CommDataRecv := new Real_Array (0..ComBufSize-1);
+            ---   // prevent floating point exceptions
+            --x   memset(this->commDataSend, 0, comBufSize*sizeof(Real_t)) ;
+            --x   memset(this->commDataRecv, 0, comBufSize*sizeof(Real_t)) ;
+            TV.CommDataSend.all := (others => 0.0);
+            TV.CommDataRecv.all := (others => 0.0);
+            --x #endif
+         end;
+      end if;
 
-   -- #if USE_MPI
-   --   // account for face communication
-   --   Index_t comBufSize =
-   --     (m_rowMin + m_rowMax + m_colMin + m_colMax + m_planeMin + m_planeMax) *
-   --     m_maxPlaneSize * MAX_FIELDS_PER_MPI_COMM ;
+      ---   // Boundary nodesets
+      --x   if (m_colLoc == 0)
+      --x     m_symmX.resize(edgeNodes*edgeNodes);
+      --x   if (m_rowLoc == 0)
+      --x     m_symmY.resize(edgeNodes*edgeNodes);
+      --x   if (m_planeLoc == 0)
+      --x     m_symmZ.resize(edgeNodes*edgeNodes);
+      if TV.ColLoc = 0 then
+         TV.Symmetry_Plane_Nodes (X) := new Node_Index_Array (0..edgeNodes ** 2);
+      end if;
+      if TV.RowLoc = 0 then
+         TV.Symmetry_Plane_Nodes (Y) := new Node_Index_Array (0..edgeNodes ** 2);
+      end if;
+      if TV.PlaneLoc = 0 then
+         TV.Symmetry_Plane_Nodes (Z) := new Node_Index_Array (0..edgeNodes ** 2);
+      end if;
+      --x }
+   end SetupCommBuffers;
 
-   --   // account for edge communication
-   --   comBufSize +=
-   --     ((m_rowMin & m_colMin) + (m_rowMin & m_planeMin) + (m_colMin & m_planeMin) +
-   --      (m_rowMax & m_colMax) + (m_rowMax & m_planeMax) + (m_colMax & m_planeMax) +
-   --      (m_rowMax & m_colMin) + (m_rowMin & m_planeMax) + (m_colMin & m_planeMax) +
-   --      (m_rowMin & m_colMax) + (m_rowMax & m_planeMin) + (m_colMax & m_planeMin)) *
-   --     m_maxPlaneSize * MAX_FIELDS_PER_MPI_COMM ;
-
-   --   // account for corner communication
-   --   // factor of 16 is so each buffer has its own cache line
-   --   comBufSize += ((m_rowMin & m_colMin & m_planeMin) +
-   -- 		 (m_rowMin & m_colMin & m_planeMax) +
-   -- 		 (m_rowMin & m_colMax & m_planeMin) +
-   -- 		 (m_rowMin & m_colMax & m_planeMax) +
-   -- 		 (m_rowMax & m_colMin & m_planeMin) +
-   -- 		 (m_rowMax & m_colMin & m_planeMax) +
-   -- 		 (m_rowMax & m_colMax & m_planeMin) +
-   -- 		 (m_rowMax & m_colMax & m_planeMax)) * CACHE_COHERENCE_PAD_REAL ;
-
-   --   this->commDataSend = new Real_t[comBufSize] ;
-   --   this->commDataRecv = new Real_t[comBufSize] ;
-   --   // prevent floating point exceptions
-   --   memset(this->commDataSend, 0, comBufSize*sizeof(Real_t)) ;
-   --   memset(this->commDataRecv, 0, comBufSize*sizeof(Real_t)) ;
-   -- #endif
-
-   --   // Boundary nodesets
-   --   if (m_colLoc == 0)
-   --     m_symmX.resize(edgeNodes*edgeNodes);
-   --   if (m_rowLoc == 0)
-   --     m_symmY.resize(edgeNodes*edgeNodes);
-   --   if (m_planeLoc == 0)
-   --     m_symmZ.resize(edgeNodes*edgeNodes);
-   -- }
-
-   -- ////////////////////////////////////////////////////////////////////////////////
-   -- void
-   -- Domain::CreateRegionIndexSets(Int_t nr, Int_t balance)
-   -- {
+   --- ////////////////////////////////////////////////////////////////////////////////
+   --x void
+   --x Domain::CreateRegionIndexSets(Int_t nr, Int_t balance)
+   --x {
    procedure CreateRegionIndexSets
      (this    : in out Domain_Record;
       nreg    : in Region_Index;
@@ -791,7 +844,7 @@ package body LULESH.Init is
       --    srand(0);
       --x    Index_t myRank = 0;
       -- #endif
-      myRank   : Index_Type := 0;
+      myRank   : constant Index_Type := 0;
       nextIndex : Element_Index := 0;
    begin
       --x    this->numReg() = nr;
@@ -835,7 +888,7 @@ package body LULESH.Init is
             elements        : Element_Index;
             runto           : Element_Index := 0;
             costDenominator : Cost_Type := 0;
-            regBinEnd       : Region_Bin_End_Array_Access :=
+            regBinEnd       : constant Region_Bin_End_Array_Access :=
               new Region_Bin_End_Array(0..this.numReg-1);
          begin
             ---       //Determine the relative weights of all the regions.  This is based off the -b flag.  Balance is the value passed into b.
@@ -844,10 +897,10 @@ package body LULESH.Init is
             --x 	 costDenominator += pow((i+1), balance);  //Total sum of all regions weights
             --x 	 regBinEnd[i] = costDenominator;  //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
             --x       }
-            for region_index in this.regions'Range loop
-               this.regions(region_index).size := 0;
-               costDenominator := costDenominator + Cost_Type((region_index+1)**Natural(balance));  -- //Total sum of all regions weights
-               regBinEnd (region_index) := costDenominator;  -- //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
+            for region in this.regions'Range loop
+               this.regions(region).size := 0;
+               costDenominator := costDenominator + Cost_Type((region+1)**Natural(balance));  -- //Total sum of all regions weights
+               regBinEnd (region) := costDenominator;  -- //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
             end loop;
 
             ---       //Until all elements are assigned
@@ -966,10 +1019,10 @@ package body LULESH.Init is
       --x       m_regElemlist[i] = new Index_t[regElemSize(i)];
       --x       regElemSize(i) = 0;
       --x    }
-      for region_index in this.Regions'Range loop
-         this.regions(region_index).elements := new
-           Element_Element_Index_Array (0..this.regions(region_index).size-1);
-         this.regions(region_index).size := 0;
+      for region in this.Regions'Range loop
+         this.regions(region).elements := new
+           Element_Element_Index_Array (0..this.regions(region).size-1);
+         this.regions(region).size := 0;
       end loop;
       ---    // Third, fill index sets
       --x    for (Index_t i=0 ; i<numElem() ; ++i) {
@@ -977,16 +1030,15 @@ package body LULESH.Init is
       --x       Index_t regndx = regElemSize(r)++; // Note increment
       --x       regElemlist(r,regndx) = i;
       --x    }
-      for element in this.Elements'Range loop
+      for Element in This.Elements'Range loop
          declare
-            --       // region index == regnum-1
-            region : Region_Index :=
-              this.elements(element).region_number-1;
-            element : Element_Index renames
-              this.regions(region).size;
+            Region              : constant Region_Index :=
+              This.Elements (Element).Region_Number - 1;
+            Last_Region_Element : Element_Index renames
+              This.Regions (Region).Size;
          begin
-            region := region + 1;
-            this.regions(region).elements(element) := element;
+            Last_Region_Element := Last_Region_Element + 1;
+            This.Regions (Region).Elements (Last_Region_Element) := Element;
          end;
       end loop;
       --x }
@@ -1001,7 +1053,7 @@ package body LULESH.Init is
       edgeNodes : in Node_Index)
    is
       --x   Index_t nidx = 0 ;
-      nidx : Node_Index := 0;
+      node : Node_Index := 0;
    begin
       --x   for (Index_t i=0; i<edgeNodes; ++i) {
       --x     Index_t planeInc = i*edgeNodes*edgeNodes ;
@@ -1026,14 +1078,15 @@ package body LULESH.Init is
          begin
             for j in 0..edgeNodes-1 loop
                if this.variables.planeLoc = 0 then
-                  this.nodes(nidx).symmetry_plane_nodes(Z) := rowInc + j;
+                  this.Variables.Symmetry_Plane_Nodes(Z)(Node) := rowInc + j;
                end if;
                if this.variables.rowLoc = 0 then
-                  this.nodes(nidx).symmetry_plane_nodes(Y) := planeInc + j;
+                  this.Variables.symmetry_plane_nodes(Y)(Node) := planeInc + j;
                end if;
                if this.variables.colLoc = 0 then
-                  this.nodes(nidx).symmetry_plane_nodes(X) := planeInc + j*edgeNodes;
+                  this.Variables.symmetry_plane_nodes(X)(Node) := planeInc + j*edgeNodes;
                end if;
+               node := node + 1;
             end loop;
          end;
       end loop;

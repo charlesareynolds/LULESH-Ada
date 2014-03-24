@@ -47,8 +47,8 @@ package LULESH.Init is
 
    --x    void SetupCommBuffers(Int_t edgeNodes);
    procedure SetupCommBuffers
-     (this      : in out Domain_Record;
-      edgeNodes : in Node_Index);
+     (This      : in out Domain_Record;
+      EdgeNodes : in Node_Index);
 
    --x    void SetupSymmetryPlanes(Int_t edgeNodes);
    procedure SetupSymmetryPlanes

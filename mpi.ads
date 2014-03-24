@@ -7,6 +7,8 @@ package MPI is
 
    package ART renames Ada.Real_Time;
 
+   type Request is private;
+
    -- MPI_comm - communicator (handle):
    type Comm_Type is private;
    COMM_WORLD : constant Comm_Type;
@@ -65,9 +67,8 @@ package MPI is
       root     : in Integer;
       comm     : in Comm_Type);
 
-
-
 private
    type Comm_Type is new Integer;
    COMM_WORLD : constant Comm_Type := 0;
+   type Request is (None);
 end MPI;
