@@ -19,19 +19,18 @@ package LULESH is
    pragma Warnings (On, "declaration hides ""SI"" at s-dimmks.ads:325");
    package SIO renames System.Dim.Mks_IO;
 
-   Usage_Error : exception;
+   Usage_Error  : exception;
    Coding_Error : exception;
 
    --- #if !defined(USE_MPI)
    --- # error "You should specify USE_MPI=0 or USE_MPI=1 on the compile line"
    --- #endif
    USE_MPI : constant Boolean := False;
-
    --- // OpenMP will be compiled in if this flag is set to 1 AND the compiler beging
    --- // used supports it (i.e. the _OPENMP symbol is defined)
    --x #define USE_OMP 1
-   USE_OMP : constant Boolean := False;
-
+   USE_OMP                  : constant Boolean := False;
+   COMPILER_SUPPORTS_OPENMP : constant Boolean := False;
    --x #if USE_MPI
    --x #include <mpi.h>
    --- /*
@@ -607,7 +606,7 @@ package LULESH is
       --x    std::vector<Real_t> m_dyy ;
       --x    std::vector<Real_t> m_dzz ;
       principal_strain : Strain_Vector;
---x    std::vector<Real_t> m_delv_xi ;    /* velocity gradient -- temporary */
+      --x    std::vector<Real_t> m_delv_xi ;    /* velocity gradient -- temporary */
       --x    std::vector<Real_t> m_delv_eta ;
       --x    std::vector<Real_t> m_delv_zeta ;
       velocity_gradient : Gradient_Vector;

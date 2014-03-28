@@ -12,14 +12,17 @@
 --x #include <cstdlib>
 --x #include "lulesh.h"
 
-with LULESH.Par;
+with Ada.Exceptions;
 with Ada.Numerics.Float_Random;
+with LULESH.Par;
 
 package body LULESH.Init is
 
+   package AEX renames Ada.Exceptions;
+
    package Random_Selection is
 
-      -- Returns an integer between Min and Max:
+      --- Returns an integer between Min and Max:
       function Choose
         (Minimum : in Integer;
          Maximum : in integer)
@@ -31,13 +34,23 @@ package body LULESH.Init is
       function Choose_Rem
         (Modulo : in Integer)
          return Integer is
-        (Choose (0, Modulo-1));
+        (Choose (0, Modulo - 1));
+
+      --- Intialzes the generator. Initializing with the same seed will produce
+      --- the same sequence of outputs.
+      procedure Initialize (Seed : in Integer);
 
    end Random_Selection;
 
    package body Random_Selection is
       package ANFR renames Ada.Numerics.Float_Random;
       Generator : ANFR.Generator;
+
+      procedure Initialize (Seed : in Integer) is
+      begin
+         ANFR.Reset (Generator, Seed);
+      end Initialize;
+
       function Choose
         (Minimum : in Integer;
          Maximum : in integer)
@@ -45,8 +58,6 @@ package body LULESH.Init is
       begin
          return Integer(Float(ANFR.Random (Generator)) * Float (Maximum - Minimum)) + Minimum;
       end Choose;
-   begin
-      ANFR.Reset(Generator);
    end Random_Selection;
 
    function Choose_Rem
@@ -62,7 +73,23 @@ package body LULESH.Init is
    function Choose_Rem
      (Modulo : in Cost_Type)
       return Cost_Type is
-     (Cost_Type(Random_Selection.Choose_Rem(Integer(Modulo))));
+     (Cost_Type (Random_Selection.Choose_Rem (Integer (Modulo))));
+
+   procedure Abort_Or_Raise
+     (X       : in AEX.Exception_Id;
+      Message : in String) is
+   begin
+      --z #if USE_MPI
+      --z       MPI_Abort(MPI_COMM_WORLD, -1) ;
+      --z #else
+      --x       exit(-1);
+      --z #endif
+      if USE_MPI then
+         MPI.Abortt (MPI.COMM_WORLD, MPI.Errorcode_Type (-1));
+      else
+         AEX.Raise_Exception (X, Message);
+      end if;
+   end Abort_Or_Raise;
 
    ---    public:
 
@@ -125,51 +152,50 @@ package body LULESH.Init is
    --x       m_elemMass.resize(numElem);
    --x    }
 
-   --    void AllocateGradients(Int_t numElem, Int_t allElem)
-   --    {
-   --       // Position gradients
-   --       m_delx_xi.resize(numElem) ;
-   --       m_delx_eta.resize(numElem) ;
-   --       m_delx_zeta.resize(numElem) ;
-
-   --       // Velocity gradients
-   --       m_delv_xi.resize(allElem) ;
-   --       m_delv_eta.resize(allElem);
-   --       m_delv_zeta.resize(allElem) ;
-   --    }
-
-   --    void DeallocateGradients()
-   --    {
-   --       m_delx_zeta.clear() ;
-   --       m_delx_eta.clear() ;
-   --       m_delx_xi.clear() ;
-
-   --       m_delv_zeta.clear() ;
-   --       m_delv_eta.clear() ;
-   --       m_delv_xi.clear() ;
-   --    }
-
-   --    void AllocateStrains(Int_t numElem)
-   --    {
-   --       m_dxx.resize(numElem) ;
-   --       m_dyy.resize(numElem) ;
-   --       m_dzz.resize(numElem) ;
-   --    }
-
-   --    void DeallocateStrains()
-   --    {
-   --       m_dzz.clear() ;
-   --       m_dyy.clear() ;
-   --       m_dxx.clear() ;
-   --    }
+   --- AllocateGradients and DeallocateGradients are not needed if gradient is in
+   --- Element_Record:
+   --x    void AllocateGradients(Int_t numElem, Int_t allElem)
+   --x    {
+   --x       // Position gradients
+   --x       m_delx_xi.resize(numElem) ;
+   --x       m_delx_eta.resize(numElem) ;
+   --x       m_delx_zeta.resize(numElem) ;
+   --x       // Velocity gradients
+   --x       m_delv_xi.resize(allElem) ;
+   --x       m_delv_eta.resize(allElem);
+   --x       m_delv_zeta.resize(allElem) ;
+   --x    }
+   --x    void DeallocateGradients()
+   --x    {
+   --x       m_delx_zeta.clear() ;
+   --x       m_delx_eta.clear() ;
+   --x       m_delx_xi.clear() ;
+   --x       m_delv_zeta.clear() ;
+   --x       m_delv_eta.clear() ;
+   --x       m_delv_xi.clear() ;
+   --x    }
+   --- AllocateStrains and DeallocateStrains are not needed if strain is in
+   --- Element_Record:
+   --x    void AllocateStrains(Int_t numElem)
+   --x    {
+   --x       m_dxx.resize(numElem) ;
+   --x       m_dyy.resize(numElem) ;
+   --x       m_dzz.resize(numElem) ;
+   --x    }
+   --x    void DeallocateStrains()
+   --x    {
+   --x       m_dzz.clear() ;
+   --x       m_dyy.clear() ;
+   --x       m_dxx.clear() ;
+   --x    }
    --- /////////////////////////////////////////////////////////////////////
    --x Domain::Domain(Int_t numRanks, Index_t colLoc,
    --x                Index_t rowLoc, Index_t planeLoc,
    --x                Index_t nx, int tp, int nr, int balance, Int_t cost)
    --x    :
-   ------------
-   -- EXPORTED:
-   ------------
+   -------------
+   --- EXPORTED:
+   -------------
    function Create
      (numRanks    : in Rank_Count_Range;
       colLoc      : in Domain_Index;
@@ -227,7 +253,7 @@ package body LULESH.Init is
          eosvmin                    => 1.0e-9 * m3,
          pressure_floor             => 0.0 * Pa,
          energy_floor               => -1.0e+15 * J,
-         dvovmax                    => 0.1,
+         dvovmax                    => Compression (0.1),
          reference_density          => 1.0 * kgpm3,
          --x    this->cost() = cost;
          imbalance_cost             => cost,
@@ -310,27 +336,34 @@ package body LULESH.Init is
       --x    BuildMesh(nx, edgeNodes, edgeElems);
       BuildMesh(this, side_length, edgeNodes, edgeElems);
 
-      -- #if _OPENMP
-      --    SetupThreadSupportStructures();
-      -- #else
-      --    // These arrays are not used if we're not threaded
-      --    m_nodeElemStart = NULL;
-      --    m_nodeElemCornerList = NULL;
-      -- #endif
+      --x #if _OPENMP
+      --x    SetupThreadSupportStructures();
+      --x #else
+      --x    // These arrays are not used if we're not threaded
+      --x    m_nodeElemStart = NULL;
+      --x    m_nodeElemCornerList = NULL;
+      --x #endif
+      if COMPILER_SUPPORTS_OPENMP then
+         SetupThreadSupportStructures (This);
+      else
+         This.Variables.NodeElemStart := null;
+         This.Variables.NodeElemCornerList := null;
+      end if;
+
       ---    // Setup region index sets. For now, these are constant sized
       ---    // throughout the run, but could be changed every cycle to
       ---    // simulate effects of ALE on the lagrange solver
       --x    CreateRegionIndexSets(nr, balance);
-      CreateRegionIndexSets(this, nr, balance);
       ---    // Setup symmetry nodesets
       --x    SetupSymmetryPlanes(edgeNodes);
-      SetupSymmetryPlanes(this, edgeNodes);
       ---    // Setup element connectivities
       --x    SetupElementConnectivities(edgeElems);
-      SetupElementConnectivities(this,edgeElems);
       ---    // Setup symmetry planes and free surface boundary arrays
       --x    SetupBoundaryConditions(edgeElems);
-      SetupBoundaryConditions(this, edgeElems);
+      CreateRegionIndexSets (this, nr, balance);
+      SetupSymmetryPlanes (this, edgeNodes);
+      SetupElementConnectivities (this,edgeElems);
+      SetupBoundaryConditions (this, edgeElems);
 
       ---    // Setup defaults
 
@@ -563,12 +596,13 @@ package body LULESH.Init is
    procedure SetupThreadSupportStructures
      (this : in out Domain_Record)
    is
-   -- #if _OPENMP
-   --    Index_t numthreads = omp_get_max_threads();
-   -- #else
-   --x    Index_t numthreads = 1;
-   -- #endif
-      numthreads         : constant Index_Type := 1;
+      --x #if _OPENMP
+      --x    Index_t numthreads = omp_get_max_threads();
+      --x #else
+      --x    Index_t numthreads = 1;
+      --x #endif
+      Numthreads         : constant Index_Type :=
+        (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Max_Threads else 1);
       --- Number of elements each node is in. Interior nodes are in 8 elements,
       --- faces 4, edges 2, and corners 1:
       nodeElemCounts     : Node_Element_Index_Array_Access;
@@ -661,11 +695,11 @@ package body LULESH.Init is
          --x       if ((clv < 0) || (clv > numElem()*8)) {
          --x 	fprintf(stderr,
          --x 		"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!\n");
-         -- #if USE_MPI
-         -- 	MPI_Abort(MPI_COMM_WORLD, -1);
-         -- #else
+         --x #if USE_MPI
+         --x 	MPI_Abort(MPI_COMM_WORLD, -1);
+         --x #else
          --x 	exit(-1);
-         -- #endif
+         --x #endif
          --x       }
          --x     }
          declare
@@ -680,9 +714,13 @@ package body LULESH.Init is
                     nodeElemCornerList(element);
                begin
                   if Clv > Max_ClSize then
-                     raise Coding_Error with
-                       "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"&
-                       "  i:" & element'Img & " clv:" & clv'Img;
+                     if USE_MPI then
+                        MPI.Abortt (MPI.COMM_WORLD, MPI.Errorcode_Type(-1));
+                     else
+                        raise Coding_Error with
+                          "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!" &
+                          "  i:" & Element'Img & " clv:" & Clv'Img;
+                     end if;
                   end if;
                end;
             end loop;
@@ -836,17 +874,22 @@ package body LULESH.Init is
       nreg    : in Region_Index;
       balance : in Balance_Type)
    is
-      -- #if USE_MPI
-      --    Index_t myRank;
-      --    MPI_Comm_rank(MPI_COMM_WORLD, &myRank) ;
-      --    srand(myRank);
-      -- #else
-      --    srand(0);
-      --x    Index_t myRank = 0;
-      -- #endif
-      myRank   : constant Index_Type := 0;
       nextIndex : Element_Index := 0;
+      --x #if USE_MPI
+      --x    Index_t myRank;
+      --x    MPI_Comm_rank(MPI_COMM_WORLD, &myRank) ;
+      --x    srand(myRank);
+      --x #else
+      --x    srand(0);
+      --x    Index_t myRank = 0;
+      --x #endif
+      myRank    : MPI.Rank_Type := 0;
    begin
+      if USE_MPI then
+         MPI.Comm_Rank (MPI.COMM_WORLD, MyRank);
+      end if;
+      Random_Selection.Initialize (MyRank);
+
       --x    this->numReg() = nr;
       this.numReg := nreg;
       --x    m_regElemSize = new Index_t[numReg()];
@@ -861,14 +904,14 @@ package body LULESH.Init is
       --x 	 this->regNumList(nextIndex) = 1;
       --x          nextIndex++;
       --x       }
-      --       regElemSize(0) = 0;
+      --x       regElemSize(0) = 0;
       --x    }
       if this.numReg = 1 then
          while (nextIndex < this.numElem) loop
             this.elements (nextIndex).region_number := 1;
             nextIndex := nextIndex + 1;
          end loop;
-         this.regions(0).size :=0;
+         this.regions(0).size := 0;
          ---    //If we have more than one region distribute the elements.
          --x    else {
       else
@@ -899,8 +942,8 @@ package body LULESH.Init is
             --x       }
             for region in this.regions'Range loop
                this.regions(region).size := 0;
-               costDenominator := costDenominator + Cost_Type((region+1)**Natural(balance));  -- //Total sum of all regions weights
-               regBinEnd (region) := costDenominator;  -- //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
+               costDenominator := costDenominator + Cost_Type((region+1)**Natural(balance));  --- //Total sum of all regions weights
+               regBinEnd (region) := costDenominator;  --- //Chance of hitting a given region is (regBinEnd[i] - regBinEdn[i-1])/costDenominator
             end loop;
 
             ---       //Until all elements are assigned
@@ -990,7 +1033,7 @@ package body LULESH.Init is
                   this.elements(nextIndex).region_number := regionNum;
                   nextIndex := nextIndex + 1;
                end loop;
-               -- 	 lastReg = regionNum;
+               --x 	 lastReg = regionNum;
                lastReg := regionNum;
                --x       }
             end loop;
@@ -1387,31 +1430,33 @@ package body LULESH.Init is
       --x    testProcs = Int_t(cbrt(Real_t(numRanks))+0.5) ;
       --x    if (testProcs*testProcs*testProcs != numRanks) {
       --x       printf("Num processors must be a cube of an integer (1, 8, 27, ...)\n") ;
-      -- #if USE_MPI
-      --       MPI_Abort(MPI_COMM_WORLD, -1) ;
-      -- #else
+      --z #if USE_MPI
+      --z       MPI_Abort(MPI_COMM_WORLD, -1) ;
+      --z #else
       --x       exit(-1);
-      -- #endif
+      --z #endif
       --x    }
       --!! same as c++?:
       ranks_root := Rank_Type(cbrt(real10(numRanks)));
       if ranks_root**3 /= numRanks then
-         raise Usage_Error
-           with "Num processors (" & numRanks'Img &
-           ") must be a cube of an integer (1, 8, 27, ...)";
+         Abort_Or_Raise
+           (Usage_Error'Identity,
+            "Num processors (" & NumRanks'Img &
+              ") must be a cube of an integer (1, 8, 27, ...)");
       end if;
       --x    if (sizeof(Real_t) != 4 && sizeof(Real_t) != 8) {
       --x       printf("MPI operations only support float and double right now...\n");
-      -- #if USE_MPI
-      --       MPI_Abort(MPI_COMM_WORLD, -1) ;
-      -- #else
+      --x #if USE_MPI
+      --x       MPI_Abort(MPI_COMM_WORLD, -1) ;
+      --x #else
       --x       exit(-1);
-      -- #endif
+      --x #endif
       --x    }
       if Real_Type'Size /= 4 and Real_Type'Size /= 8 then
-         raise Usage_Error
-           with "MPI operations only support float and double right now." &
-           "  Size of Real_t is " & Real_Type'Size'Img;
+         Abort_Or_Raise
+           (Usage_Error'Identity,
+               "MPI operations only support float and double right now." &
+                 "  Size of Real_t is " & Real_Type'Size'Img);
       end if;
       --x    if (MAX_FIELDS_PER_MPI_COMM > CACHE_COHERENCE_PAD_REAL) {
       --x       printf("corner element comm buffers too small.  Fix code.\n") ;

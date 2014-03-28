@@ -533,7 +533,7 @@ package body LULESH is
       Calculate_Jacobian_Determinant;
    end CalcElemShapeFunctionDerivatives;
 
-   -- /******************************************/
+   --- /******************************************/
 
 
    --x static inline
@@ -547,9 +547,9 @@ package body LULESH is
    --x                        const Real_t x3, const Real_t y3, const Real_t z3)
    --x {
    procedure SumElemFaceNormal
-   -- Using four parms here instead of an array because this will be called with
-   -- disjoint elements of an array. You can't use an aggregate in the call
-   -- because it is not a variable, and these are in out parameters :
+   --- Using four parms here instead of an array because this will be called with
+   --- disjoint elements of an array. You can't use an aggregate in the call
+   --- because it is not a variable, and these are in out parameters :
      (node0_area  : in out Area_Vector;
       node1_area  : in out Area_Vector;
       node2_area  : in out Area_Vector;
@@ -1649,9 +1649,9 @@ package body LULESH is
    --- /******************************************/
 
    type EOS_Element_Info_Record is record
-      bvc          : Dimensionless;
-      compHalfStep : Compression_Type;
-      compressionn : Compression_Type;
+      bvc          : Compression;
+      compHalfStep : Compression;
+      compressionn : Compression;
       delvc        : Volume;
       e_new        : Energy;
       e_old        : Energy;
@@ -2429,7 +2429,12 @@ package body LULESH is
    --       Index_t elem = regElemList[i];
 
    --       p_new[i] = bvc[i] * e_old[i] ;
-
+   ---  pressure = bvc * energy
+   ---  pressure/energy = bvc
+   ---  (m**-1.k**1.s**-2)/(m**2.k**1.s**-2) = bvc
+   ---  (m**-1)/(m**2) = bvc
+   ---  (m**-3) = bvc
+   ---  compression = bvc
    --       if    (FABS(p_new[i]) <  p_cut   )
    --          p_new[i] = Real_t(0.0) ;
 
@@ -2512,16 +2517,16 @@ package body LULESH is
          declare
             elem  : EOS_Element_Info_Record renames info.elements (element);
             vhalf : constant Volume := Volume
-              (1.0 / (Compression_Type (1.0) + elem.compHalfStep));
+              (1.0 / (Compression (1.0) + elem.compHalfStep));
          begin
             if elem.delvc > Volume (0.0) then
                elem.q_new := 0.0;
             else
                declare
-                  ssc : Mks_Type :=
+                  ssc : Dimensionless :=
                     (elem.pbvc * elem.e_new
                       + vhalf**2 * elem.bvc * pHalfStep (element))
-                      / info.rho0;
+                      / Info.Rho0;
                begin
                   if ssc <= 0.1111111e-36 then
                      ssc := 0.3333333e-18;
@@ -2781,8 +2786,8 @@ package body LULESH is
                vchalf       : Volume;
                info_element : EOS_Element_Info_Record renames
                  info.elements (region_element_index);
-               function To_Compression (this : in Volume) return Compression_Type is
-                 (Dimensionless (1.0) / this - Compression_Type (1.0));
+               function To_Compression (this : in Volume) return Compression is
+                 (Dimensionless (1.0) / this - Compression (1.0));
             begin
                info_element.compressionn := To_Compression (vnewc (element));
                vchalf := vnewc (element) - info_element.delvc * 0.5;
@@ -2935,7 +2940,7 @@ package body LULESH is
             --x                 vnew[i] = eosvmin ;
             --x           }
             --x        }
-            if eosvmin /= 0.0 * SI.m then
+            if eosvmin /= Volume (0.0) then
                for element in 0..numElem-1 loop
                   if vnew(element) < eosvmin then
                      vnew(element) := eosvmin;
@@ -2949,7 +2954,7 @@ package body LULESH is
             --x                 vnew[i] = eosvmax ;
             --x           }
             --x        }
-            if eosvmax /= 0.0 then
+            if eosvmax /= Volume (0.0) then
                for element in 0..numElem-1 loop
                   if vnew(element) > eosvmax then
                      vnew(element) := eosvmax;
@@ -2982,17 +2987,17 @@ package body LULESH is
                declare
                   vc : Volume := domain.elements(element).volume_relative;
                begin
-                  if eosvmin /= 0.0 then
+                  if eosvmin /= Volume (0.0) then
                      if vc < eosvmin then
                         vc := eosvmin;
                      end if;
                   end if;
-                  if eosvmax /= 0.0 then
+                  if eosvmax /= Volume (0.0) then
                      if vc > eosvmax then
                         vc := eosvmax;
                      end if;
                   end if;
-                  if vc <= 0.0 then
+                  if vc <= Volume (0.0) then
                      if USE_MPI then
                         MPI.Abortt (MPI.COMM_WORLD, VolumeError);
                      else
