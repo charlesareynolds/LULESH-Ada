@@ -12,7 +12,7 @@ package LULESH.Util is
    --x    Int_t balance; // -b
    --x };
    type cmdLineOpts is record
-      its         : Int_t;
+      its         : Natural;
       side_length : Element_Index;
       numReg      : Region_Index;
       numFiles    : Int_t;

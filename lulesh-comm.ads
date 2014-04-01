@@ -1,6 +1,8 @@
 package LULESH.Comm is
 
    type Domain_Member is private;
+   type Domain_Member_Array is array
+     (Natural range <>) of Domain_Member;
 
    --- // lulesh-comm
 
@@ -25,7 +27,7 @@ package LULESH.Comm is
      (domain    : in out Domain_Record;
       msgType    : in Int_t;
       xferFields : in Index_Type;
-      fieldData  : in Domain_member;
+      fieldData  : in Domain_Member_Array;
       dx         : in Element_Index;
       dy         : in Element_Index;
       dz         : in Element_Index;

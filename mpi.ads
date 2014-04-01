@@ -1,6 +1,7 @@
 -- This spec is just a stand-in for a real Ada to C MPI binding, to enable
 -- compilation of Ada translated from MPI-using C code.
 with Ada.Real_Time;
+with Ada.Unchecked_Deallocation;
 with System;
 
 package MPI is
@@ -13,12 +14,19 @@ package MPI is
    type Comm_Type is private;
    COMM_WORLD : constant Comm_Type;
 
+   type Comm_Buffer is array (Natural range <>) of Float;
+   type Comm_Buffer_Access is access Comm_Buffer;
+   procedure Release is new Ada.Unchecked_Deallocation
+     (Comm_Buffer,
+      Comm_Buffer_Access);
+
    type errorcode_Type is new Integer;
    type Datatype_Type is
-     (DOUBLE);
+     (DOUBLE,
+     FLOAT);
 
    type Reduce_Op_Type is
-     (MAX);
+     (MIN, MAX);
 
    subtype Rank_Type is Integer;
 
@@ -51,6 +59,16 @@ package MPI is
    -- Point to Point Communication Routines:
 
    -- Collective Communication Routines:
+--         int MPI_Allreduce ( void *sendbuf, void *recvbuf, int count,
+--                            MPI_Datatype datatype, MPI_Op op, MPI_Comm comm )
+   procedure Allreduce
+     (Sendbuf  : in System.Address;
+      Recvbuf  : in System.Address;
+      Count    : in Natural;
+      Datatype : in Datatype_Type;
+      Op       : in Reduce_Op_Type;
+      Comm     : in Comm_Type);
+
 
    -- int MPI_Barrier( MPI_Comm comm )
    procedure Barrier

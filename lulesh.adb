@@ -207,17 +207,20 @@ package body LULESH is
    --x void TimeIncrement(Domain& domain)
    --x {
    ----------------------
-   -- EXPORTED (private):
+   --- EXPORTED (private):
    ----------------------
-   procedure TimeIncrement (domain : in out Domain_Record) is
+   procedure TimeIncrement
+     (domain : in out Domain_Record)
+   is
+      DV       : Variables_Record renames Domain.Variables;
       targetdt : Time_Span;
       use ART;
    begin
       --x    Real_t targetdt = domain.stoptime() - domain.time() ;
-      targetdt := domain.variables.stoptime - domain.variables.current_time;
+      targetdt := DV.stoptime - DV.current_time;
 
       --x    if ((domain.dtfixed() <= Real_t(0.0)) && (domain.cycle() != Int_t(0))) {
-      if domain.variables.use_courant_condition and domain.variables.cycle /= 0 then
+      if DV.use_courant_condition and DV.cycle /= 0 then
          --x       Real_t ratio ;
          --x       Real_t olddt = domain.deltatime() ;
 
@@ -226,7 +229,7 @@ package body LULESH is
          --x       Real_t newdt ;
          declare
             ratio  : Dimensionless;
-            olddt  : constant Time_Span := domain.variables.deltatime;
+            olddt  : constant Time_Span := DV.deltatime;
             gnewdt : Time_Span := Time_Span_Last;
             newdt  : Time_Span;
          begin
@@ -236,22 +239,31 @@ package body LULESH is
             --x       if (domain.dthydro() < gnewdt) {
             --x          gnewdt = domain.dthydro() * Real_t(2.0) / Real_t(3.0) ;
             --x       }
-            if domain.variables.dtcourant < gnewdt then
-               gnewdt := domain.variables.dtcourant / 2.0;
+            if DV.dtcourant < gnewdt then
+               gnewdt := DV.dtcourant / 2.0;
             end if;
-            if domain.variables.dthydro < gnewdt then
-               gnewdt := domain.variables.dthydro * 2.0 / 3.0;
+            if DV.dthydro < gnewdt then
+               gnewdt := DV.dthydro * 2.0 / 3.0;
             end if;
 
-            -- #if USE_MPI
-            --       MPI_Allreduce(&gnewdt, &newdt, 1,
-            --                     ((sizeof(Real_t) == 4) ? MPI_FLOAT : MPI_DOUBLE),
-            --                     MPI_MIN, MPI_COMM_WORLD) ;
-            -- #else
+            --x #if USE_MPI
+            --x       MPI_Allreduce(&gnewdt, &newdt, 1,
+            --x                     ((sizeof(Real_t) == 4) ? MPI_FLOAT : MPI_DOUBLE),
+            --x                     MPI_MIN, MPI_COMM_WORLD) ;
+            --x #else
             --x       newdt = gnewdt;
-            -- #endif
-            newdt := gnewdt;
-
+            --x #endif
+            if USE_MPI then
+               MPI.Allreduce
+                 (Sendbuf  => Gnewdt'Address,
+                  Recvbuf  => Newdt'Address,
+                  Count    => 1,
+                  Datatype => (if Real_Type'Size = 16 then MPI.FLOAT else MPI.DOUBLE),
+                  Op       => MPI.MIN,
+                  Comm     => MPI.COMM_WORLD);
+            else
+               Newdt := Gnewdt;
+            end if;
             --x       ratio = newdt / olddt ;
             --x       if (ratio >= Real_t(1.0)) {
             --x          if (ratio < domain.deltatimemultlb()) {
@@ -263,20 +275,20 @@ package body LULESH is
             --x       }
             ratio := newdt / olddt;
             if ratio >= 1.0 then
-               if ratio < domain.variables.delta_time_multiplier_lower_bound then
+               if ratio < DV.delta_time_multiplier_lower_bound then
                   newdt := olddt;
-               elsif ratio > domain.variables.delta_time_multiplier_upper_bound then
-                  newdt := olddt * domain.variables.delta_time_multiplier_upper_bound;
+               elsif ratio > DV.delta_time_multiplier_upper_bound then
+                  newdt := olddt * DV.delta_time_multiplier_upper_bound;
                end if;
 
                --x       if (newdt > domain.dtmax()) {
                --x          newdt = domain.dtmax() ;
                --x       }
                --x       domain.deltatime() = newdt ;
-               if newdt > domain.variables.dtmax then
-                  newdt := domain.variables.dtmax;
+               if newdt > DV.dtmax then
+                  newdt := DV.dtmax;
                end if;
-               domain.variables.deltatime := newdt;
+               DV.deltatime := newdt;
             end if;
          end;
          --x    }
@@ -287,27 +299,27 @@ package body LULESH is
       --x        (targetdt < (Real_t(4.0) * domain.deltatime() / Real_t(3.0))) ) {
       --x       targetdt = Real_t(2.0) * domain.deltatime() / Real_t(3.0) ;
       --x    }
-      if targetdt > domain.variables.deltatime and
-        targetdt < (4.0 * domain.variables.deltatime / 3.0) then
-         targetdt := 2.0 * domain.variables.deltatime / 3.0;
+      if targetdt > DV.deltatime and
+        targetdt < (4.0 * DV.deltatime / 3.0) then
+         targetdt := 2.0 * DV.deltatime / 3.0;
       end if;
 
       --x    if (targetdt < domain.deltatime()) {
       --x       domain.deltatime() = targetdt ;
       --x    }
-      if targetdt < domain.variables.deltatime then
-         domain.variables.deltatime := targetdt;
+      if targetdt < DV.deltatime then
+         DV.deltatime := targetdt;
       end if;
 
       --x    domain.time() += domain.deltatime() ;
-      domain.variables.current_time := domain.variables.current_time + domain.variables.deltatime;
+      DV.current_time := DV.current_time + DV.deltatime;
 
       --x    ++domain.cycle() ;
-      domain.variables.cycle := domain.variables.cycle + 1;
+      DV.cycle := DV.cycle + 1;
       --x }
    end TimeIncrement;
 
-   -- /******************************************/
+   --- /******************************************/
 
    --x static inline
    --x void CollectDomainNodesToElemNodes(Domain &domain,
@@ -317,14 +329,17 @@ package body LULESH is
    --x                                    Real_t elemZ[8])
    --x {
    procedure CollectDomainNodesToElemNodes
-     (domain               : in out Domain_Record;
-      element_node_indexes : in     NodesPerElement_Element_Index_Array;
-      element_node_coords  : out    NodesPerElement_Coordinate_Array)
-     with Inline is
+     (Domain              : in  Domain_Record;
+      Element             : in  Element_Index;
+      Element_Node_Coords : out NodesPerElement_Coordinate_Array)
+     with Inline
+   is
+      Element_Node_Indexes : constant NodesPerElement_Element_Index_Array :=
+        Domain.Elements (Element).Node_Indexes;
    begin
-      for element_node in element_node_indexes'Range loop
-         element_node_coords (element_node) :=
-           domain.nodes (element_node_indexes (element_node)).coordinate;
+      for Element_Node in Element_Node_Indexes'Range loop
+         Element_Node_Coords (Element_Node) :=
+           Domain.Nodes (Element_Node_Indexes (Element_Node)).Coordinate;
       end loop;
    end CollectDomainNodesToElemNodes;
 
@@ -348,19 +363,19 @@ package body LULESH is
       --x    for (Index_t i = 0 ; i < numElem ; ++i){
       --x       sigxx[i] = sigyy[i] = sigzz[i] =  - domain.p(i) - domain.q(i) ;
       --x    }
-      for element in domain.elements'Range loop
-         -- Pressure'Base is to make sure the dimensions match.
+      for Element in domain.elements'Range loop
+         --- Pressure'Base is to make sure the dimensions match.
          pragma Warnings (Off, "redundant conversion, expression is of type ""MKS_TYPE""");
          stress_integrated (element) :=
            (others => Pressure'Base
-              (- domain.elements(element).epressure
+              (- domain.elements(element).Pressure
                - Pressure (domain.elements(element).artificial_viscosity)));
            pragma Warnings (On, "redundant conversion, expression is of type ""MKS_TYPE""");
       end loop;
       --x }
    end InitStressTermsForElems;
 
-   -- /******************************************/
+   --- /******************************************/
 
    --x static inline
    --x void CalcElemShapeFunctionDerivatives( Real_t const x[],
@@ -523,7 +538,7 @@ package body LULESH is
            (+ fj(X, Eta) * cj(X, Eta)
             + fj(Y, Eta) * cj(Y, Eta)
             + fj(Z, Eta) * cj(Z, Eta)));
-         -- }
+         --- }
       end Calculate_Jacobian_Determinant;
 
    begin
@@ -576,19 +591,19 @@ package body LULESH is
          - Node_Coords (0) + Node_Coords (1) + Node_Coords (2) - Node_Coords (3)));
 
 
-      -- Dimension aspects seem to be lost when using a dimensioned type as a
-      -- generic actual parameter. This means that an assignment like:
-      --      Test1 : constant Area_Vector :=
-      --          (X => Area(1.0)...
-      -- gets the semantic error:
-      --         635:15 expected dimension [], found [L**2]
-      -- So Calc_Area returns Area'Base, which is dimension []:
-      --
+      --- Dimension aspects seem to be lost when using a dimensioned type as a
+      --- generic actual parameter. This means that an assignment like:
+      ---      Test1 : constant Area_Vector :=
+      ---          (X => Area(1.0)...
+      --- gets the semantic error:
+      ---         635:15 expected dimension [], found [L**2]
+      --- So Calc_Area returns Area'Base, which is dimension []:
+      ---
       pragma Warnings (Off, "redundant conversion, expression is of type ""MKS_TYPE""");
       function Calc_Area
         (Axis_1, Axis_2 : in Cartesian_Axes)
          return Area'Base is
-         -- Area'Base is to make sure the dimensions match.
+         --- Area'Base is to make sure the dimensions match.
         (0.25 * Area'Base
            (Bisect (0) (Axis_1) * Bisect (1) (Axis_2) -
             Bisect (0) (Axis_2) * Bisect (1) (Axis_1)))
@@ -631,7 +646,7 @@ package body LULESH is
    --x                          const Real_t x[8],
    --x                          const Real_t y[8],
    --x                          const Real_t z[8])
-   -- {
+   --x {
 
    procedure CalcElemNodeNormals
      (pf                  : in out NodesPerElement_Area_Vector_Array;
@@ -699,39 +714,39 @@ package body LULESH is
                element_node_coords (nodes_of(face)(2)),
                element_node_coords (nodes_of(face)(3))));
       end loop;
-   -- }
+   --x }
    end CalcElemNodeNormals;
 
-   -- /******************************************/
+   --- /******************************************/
 
-   -- static inline
-   -- void SumElemStressesToNodeForces( const Real_t B[][8],
-   --                                   const Real_t stress_xx,
-   --                                   const Real_t stress_yy,
-   --                                   const Real_t stress_zz,
-   --                                   Real_t fx[], Real_t fy[], Real_t fz[] )
-   -- {
+   --x static inline
+   --x void SumElemStressesToNodeForces( const Real_t B[][8],
+   --x                                   const Real_t stress_xx,
+   --x                                   const Real_t stress_yy,
+   --x                                   const Real_t stress_zz,
+   --x                                   Real_t fx[], Real_t fy[], Real_t fz[] )
+   --x {
    procedure SumElemStressesToNodeForces
      (node_areas     : in     NodesPerElement_Area_Vector_Array;
       element_stress : in     Pressure_Vector;
       node_forces    : in out NodesPerElement_Force_Vector_Array)
      with Inline
    is begin
-   --    for(Index_t i = 0; i < 8; i++) {
-   --       fx[i] = -( stress_xx * B[0][i] );
-   --       fy[i] = -( stress_yy * B[1][i] );
-   --       fz[i] = -( stress_zz * B[2][i] );
-   --    }
+   --x    for(Index_t i = 0; i < 8; i++) {
+   --x       fx[i] = -( stress_xx * B[0][i] );
+   --x       fy[i] = -( stress_yy * B[1][i] );
+   --x       fz[i] = -( stress_zz * B[2][i] );
+   --x    }
       for node in NodesPerElement_Range loop
          for axis in Cartesian_Axes loop
             node_forces(node)(axis) :=
               -(element_stress(axis) * node_areas(node)(axis));
          end loop;
       end loop;
-   -- }
+   --x }
    end SumElemStressesToNodeForces;
 
-   -- /******************************************/
+   --- /******************************************/
 
    --x static inline
    --x void IntegrateStressForElems( Domain &domain,
@@ -744,12 +759,13 @@ package body LULESH is
       determinants      : access Element_Determinant_Array)
      with Inline is
 
-      -- #if _OPENMP
-      --    Index_t numthreads = omp_get_max_threads();
-      -- #else
-      --t    Index_t numthreads = 1;
-      numthreads : constant Index_Type := 1;
-      -- #endif
+      --x #if _OPENMP
+      --x    Index_t numthreads = omp_get_max_threads();
+      --x #else
+      --x    Index_t numthreads = 1;
+      --x #endif
+      numthreads : constant Index_Type :=
+        (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Max_Threads else 1);
 
       --x    Index_t numElem8 = numElem * 8 ;
       --x    Real_t *fx_elem;
@@ -758,7 +774,7 @@ package body LULESH is
       --x    Real_t fx_local[8] ;
       --x    Real_t fy_local[8] ;
       --x    Real_t fz_local[8] ;
-      f_elem  : Element_NodesPerElement_Force_Vector_Array_Array_Access;
+      f_elem             : Element_NodesPerElement_Force_Vector_Array_Array_Access;
       local_nodes_forces : NodesPerElement_Force_Vector_Array;
    begin
       --x   if (numthreads > 1) {
@@ -794,7 +810,7 @@ package body LULESH is
             --x     CollectDomainNodesToElemNodes(domain, elemToNode, x_local, y_local, z_local);
             CollectDomainNodesToElemNodes
               (domain               => domain,
-               element_node_indexes => element_node_indexes,
+               Element              => Element,
                element_node_coords  => element_node_coords);
 
             ---     // Volume calculation involves extra work for numerical consistency
@@ -811,42 +827,41 @@ package body LULESH is
             --- CalcElemNodeNormals below resets B before using it.
             --- Is B not used because of "extra work for numerical consistency"?
 
-            --     CalcElemNodeNormals( B[0] , B[1], B[2],
-            --                           x_local, y_local, z_local );
+            --x     CalcElemNodeNormals( B[0] , B[1], B[2],
+            --x                           x_local, y_local, z_local );
             CalcElemNodeNormals
               (pf                  => B,
                element_node_coords => element_node_coords);
 
-            --     if (numthreads > 1) {
+            --x     if (numthreads > 1) {
             if (numthreads > 1) then
-               --        // Eliminate thread writing conflicts at the nodes by giving
-               --        // each element its own copy to write to
-               --        SumElemStressesToNodeForces( B, sigxx[k], sigyy[k], sigzz[k],
-               --                                     &fx_elem[k*8],
-               --                                     &fy_elem[k*8],
-               --                                     &fz_elem[k*8] ) ;
+               ---        // Eliminate thread writing conflicts at the nodes by giving
+               ---        // each element its own copy to write to
+               --x        SumElemStressesToNodeForces( B, sigxx[k], sigyy[k], sigzz[k],
+               --x                                     &fx_elem[k*8],
+               --x                                     &fy_elem[k*8],
+               --x                                     &fz_elem[k*8] ) ;
                SumElemStressesToNodeForces
                  (node_areas     => B,
                   element_stress => stress_integrated (element),
                   node_forces    => f_elem (element));
-               --     }
-               --     else {
+               --x     }
+               --x     else {
             else
-               -- x       SumElemStressesToNodeForces( B, sigxx[k], sigyy[k], sigzz[k],
-               -- x                                    fx_local, fy_local, fz_local ) ;
+               --x       SumElemStressesToNodeForces( B, sigxx[k], sigyy[k], sigzz[k],
+               --x                                    fx_local, fy_local, fz_local ) ;
                SumElemStressesToNodeForces
                  (node_areas     => B,
                   element_stress => stress_integrated (element),
                   node_forces    => local_nodes_forces);
-
-               --        // copy nodal force contributions to global force arrray.
-               --        for( Index_t lnode=0 ; lnode<8 ; ++lnode ) {
-               --           Index_t gnode = elemToNode[lnode];
-               --           domain.fx(gnode) += fx_local[lnode];
-               --           domain.fy(gnode) += fy_local[lnode];
-               --           domain.fz(gnode) += fz_local[lnode];
-               --        }
-               --     }
+               ---        // copy nodal force contributions to global force arrray.
+               --x        for( Index_t lnode=0 ; lnode<8 ; ++lnode ) {
+               --x           Index_t gnode = elemToNode[lnode];
+               --x           domain.fx(gnode) += fx_local[lnode];
+               --x           domain.fy(gnode) += fy_local[lnode];
+               --x           domain.fz(gnode) += fz_local[lnode];
+               --x        }
+               --x     }
                for element_node in NodesPerElement_Range loop
                   declare
                      node : constant Node_Index :=
@@ -858,20 +873,20 @@ package body LULESH is
                end loop;
             end if;
          end;
-         --   }
+         --x   }
       end loop;
 
-      --   if (numthreads > 1) {
-      --      // If threaded, then we need to copy the data out of the temporary
-      --      // arrays used above into the final forces field
-      -- #pragma omp parallel for firstprivate(numNode)
-      --      for( Index_t gnode=0 ; gnode<numNode ; ++gnode )
-      --      {
-      --         Index_t count = domain.nodeElemCount(gnode) ;
-      --         Index_t *cornerList = domain.nodeElemCornerList(gnode) ;
-      --         Real_t fx_tmp = Real_t(0.0) ;
-      --         Real_t fy_tmp = Real_t(0.0) ;
-      --         Real_t fz_tmp = Real_t(0.0) ;
+      --x   if (numthreads > 1) {
+      ---      // If threaded, then we need to copy the data out of the temporary
+      ---      // arrays used above into the final forces field
+      --- #pragma omp parallel for firstprivate(numNode)
+      --x      for( Index_t gnode=0 ; gnode<numNode ; ++gnode )
+      --x      {
+      --x         Index_t count = domain.nodeElemCount(gnode) ;
+      --x         Index_t *cornerList = domain.nodeElemCornerList(gnode) ;
+      --x         Real_t fx_tmp = Real_t(0.0) ;
+      --x         Real_t fy_tmp = Real_t(0.0) ;
+      --x         Real_t fz_tmp = Real_t(0.0) ;
       --         for (Index_t i=0 ; i < count ; ++i) {
       --            Index_t elem = cornerList[i] ;
       --            fx_tmp += fx_elem[elem] ;
@@ -885,13 +900,44 @@ package body LULESH is
       --      Release(&fz_elem) ;
       --      Release(&fy_elem) ;
       --      Release(&fx_elem) ;
-      --   }
-      -- }
+      --x   }
+      if Numthreads > 1 then
+      ---      // If threaded, then we need to copy the data out of the temporary
+      ---      // arrays used above into the final forces field
+         for Gnode in 0 .. Numnode - 1 loop
+            declare
+               Count      : Element_Index := domain.nodeElemCount(gnode);
+               CornerList : Element_Element_Index_Array_Access :=
+                 Domain.NodeElemCornerList (Gnode);
+               F_Tmp : Coordinate_Vector := (others => Length (0.0));
+            begin
+               for I in 0 .. Count - 1 loop
+                  declare
+                     Element : Constant Element_Index := CornerList (I);
+                  begin
+                     for XYZ in Cartesian_Axes loop
+                        F_Tmp (XYZ) := F_Tmp (XYZ) + F_Elem(Element)(XYZ);
+                     end loop;
+                     F (Gnode) := F_Tmp;
+                  end;
+               end loop;
+            end;
+
+         end loop;
+      end if;
+      --x }
    end IntegrateStressForElems;
 
    -- /******************************************/
 
    twelfth : constant := 1.0 / 12.0;
+
+   DERIVITAVE_INPUTS : constant := 6;
+   subtype Derivitave_Input_Range is
+     Node_Index range 0 .. DERIVITAVE_INPUTS - 1;
+   subtype Input_Index_Array is Node_Node_Index_Array (Derivitave_Input_Range);
+   subtype Volume_Derivitave_Coordinate_Input_Array is
+     Node_Coordinate_Array (Derivitave_Input_Range);
 
    -- static inline
    -- void VoluDer(const Real_t x0, const Real_t x1, const Real_t x2,
@@ -902,30 +948,37 @@ package body LULESH is
    --              const Real_t z3, const Real_t z4, const Real_t z5,
    --              Real_t* dvdx, Real_t* dvdy, Real_t* dvdz)
    -- {
-   procedure VoluDer
-     (fc  : in  NodesPerElement_XYZ_Real_Array_Array;
-      dvd : out XYZ_Real_Array)
+   function VoluDer
+     (Nodes        : in NodesPerElement_Coordinate_Array;
+      Node_Indexes : in Input_Index_Array)
+      return Coordinate_Vector
      with Inline
    is
+      Fc  : Volume_Derivitave_Coordinate_Input_Array;
+      Dvd : Coordinate_Vector;
    begin
-   --    const Real_t twelfth = Real_t(1.0) / Real_t(12.0) ;
-   --    *dvdx =
-   --       (y1 + y2) * (z0 + z1) - (y0 + y1) * (z1 + z2) +
-   --       (y0 + y4) * (z3 + z4) - (y3 + y4) * (z0 + z4) -
-   --       (y2 + y5) * (z3 + z5) + (y3 + y5) * (z2 + z5);
-   --    *dvdy =
-   --       - (x1 + x2) * (z0 + z1) + (x0 + x1) * (z1 + z2) -
-   --       (x0 + x4) * (z3 + z4) + (x3 + x4) * (z0 + z4) +
-   --       (x2 + x5) * (z3 + z5) - (x3 + x5) * (z2 + z5);
-   --    *dvdz =
-   --       - (y1 + y2) * (x0 + x1) + (y0 + y1) * (x1 + x2) -
-   --       (y0 + y4) * (x3 + x4) + (y3 + y4) * (x0 + x4) +
-   --       (y2 + y5) * (x3 + x5) - (y3 + y5) * (x2 + x5);
-
-   --    *dvdx *= twelfth;
-   --    *dvdy *= twelfth;
-   --    *dvdz *= twelfth;
+      --x    const Real_t twelfth = Real_t(1.0) / Real_t(12.0) ;
+      --x    *dvdx =
+      --x       (y1 + y2) * (z0 + z1) - (y0 + y1) * (z1 + z2) +
+      --x       (y0 + y4) * (z3 + z4) - (y3 + y4) * (z0 + z4) -
+      --x       (y2 + y5) * (z3 + z5) + (y3 + y5) * (z2 + z5);
+      --x    *dvdy =
+      --x       - (x1 + x2) * (z0 + z1) + (x0 + x1) * (z1 + z2) -
+      --x       (x0 + x4) * (z3 + z4) + (x3 + x4) * (z0 + z4) +
+      --x       (x2 + x5) * (z3 + z5) - (x3 + x5) * (z2 + z5);
+      --x    *dvdz =
+      --x       - (y1 + y2) * (x0 + x1) + (y0 + y1) * (x1 + x2) -
+      --x       (y0 + y4) * (x3 + x4) + (y3 + y4) * (x0 + x4) +
+      --x       (y2 + y5) * (x3 + x5) - (y3 + y5) * (x2 + x5);
+      --x    *dvdx *= twelfth;
+      --x    *dvdy *= twelfth;
+      --x    *dvdz *= twelfth;
+      --- Copy the six of eight nodes we want for this call:
+      for Index in Derivitave_Input_Range loop
+         Fc (Index) := Nodes (Node_Indexes (Index));
+      end loop;
       pragma Warnings (Off, "unary minus expression should be parenthesized here");
+      --- Want to loop over xyz, but left-hand signs are not the same for each:
       dvd(X) := twelfth *
         (+ (fc(1)(y) + fc(2)(y)) * (fc(0)(z) + fc(1)(z))
          - (fc(0)(y) + fc(1)(y)) * (fc(1)(z) + fc(2)(z))
@@ -934,68 +987,83 @@ package body LULESH is
          - (fc(2)(y) + fc(5)(y)) * (fc(3)(z) + fc(5)(z))
          + (fc(3)(y) + fc(5)(y)) * (fc(2)(z) + fc(5)(z)));
       dvd(Y) := twelfth *
-        (- (fc(1)(x) + fc(2)(x)) * (fc(0)(z) + fc(1)(z))
-         + (fc(0)(x) + fc(1)(x)) * (fc(1)(z) + fc(2)(z))
-         - (fc(0)(x) + fc(4)(x)) * (fc(3)(z) + fc(4)(z))
-         + (fc(3)(x) + fc(4)(x)) * (fc(0)(z) + fc(4)(z))
-         + (fc(2)(x) + fc(5)(x)) * (fc(3)(z) + fc(5)(z))
-         - (fc(3)(x) + fc(5)(x)) * (fc(2)(z) + fc(5)(z)));
+        (- (fc(0)(z) + fc(1)(z)) * (fc(1)(x) + fc(2)(x))
+         + (fc(1)(z) + fc(2)(z)) * (fc(0)(x) + fc(1)(x))
+         - (fc(3)(z) + fc(4)(z)) * (fc(0)(x) + fc(4)(x))
+         + (fc(0)(z) + fc(4)(z)) * (fc(3)(x) + fc(4)(x))
+         + (fc(3)(z) + fc(5)(z)) * (fc(2)(x) + fc(5)(x))
+         - (fc(2)(z) + fc(5)(z)) * (fc(3)(x) + fc(5)(x)));
       dvd(Z) := twelfth *
-        (- (fc(1)(y) + fc(2)(y)) * (fc(0)(x) + fc(1)(x))
-         + (fc(0)(y) + fc(1)(y)) * (fc(1)(x) + fc(2)(x))
-         - (fc(0)(y) + fc(4)(y)) * (fc(3)(x) + fc(4)(x))
-         + (fc(3)(y) + fc(4)(y)) * (fc(0)(x) + fc(4)(x))
-         + (fc(2)(y) + fc(5)(y)) * (fc(3)(x) + fc(5)(x))
-         - (fc(3)(y) + fc(5)(y)) * (fc(2)(x) + fc(5)(x)));
+        (- (fc(0)(x) + fc(1)(x)) * (fc(1)(y) + fc(2)(y))
+         + (fc(1)(x) + fc(2)(x)) * (fc(0)(y) + fc(1)(y))
+         - (fc(3)(x) + fc(4)(x)) * (fc(0)(y) + fc(4)(y))
+         + (fc(0)(x) + fc(4)(x)) * (fc(3)(y) + fc(4)(y))
+         + (fc(3)(x) + fc(5)(x)) * (fc(2)(y) + fc(5)(y))
+         - (Fc(2)(x) + Fc(5)(x)) * (Fc(3)(y) + Fc(5)(y)));
       pragma Warnings (On, "unary minus expression should be parenthesized here");
-   -- }
+      -- }
+      return Dvd;
    end VoluDer;
 
-   -- /******************************************/
+   --x /******************************************/
 
-   -- static inline
-   -- void CalcElemVolumeDerivative(Real_t dvdx[8],
-   --                               Real_t dvdy[8],
-   --                               Real_t dvdz[8],
-   --                               const Real_t x[8],
-   --                               const Real_t y[8],
-   --                               const Real_t z[8])
-   -- {
-   --    VoluDer(x[1], x[2], x[3], x[4], x[5], x[7],
-   --            y[1], y[2], y[3], y[4], y[5], y[7],
-   --            z[1], z[2], z[3], z[4], z[5], z[7],
-   --            &dvdx[0], &dvdy[0], &dvdz[0]);
-   --    VoluDer(x[0], x[1], x[2], x[7], x[4], x[6],
-   --            y[0], y[1], y[2], y[7], y[4], y[6],
-   --            z[0], z[1], z[2], z[7], z[4], z[6],
-   --            &dvdx[3], &dvdy[3], &dvdz[3]);
-   --    VoluDer(x[3], x[0], x[1], x[6], x[7], x[5],
-   --            y[3], y[0], y[1], y[6], y[7], y[5],
-   --            z[3], z[0], z[1], z[6], z[7], z[5],
-   --            &dvdx[2], &dvdy[2], &dvdz[2]);
-   --    VoluDer(x[2], x[3], x[0], x[5], x[6], x[4],
-   --            y[2], y[3], y[0], y[5], y[6], y[4],
-   --            z[2], z[3], z[0], z[5], z[6], z[4],
-   --            &dvdx[1], &dvdy[1], &dvdz[1]);
-   --    VoluDer(x[7], x[6], x[5], x[0], x[3], x[1],
-   --            y[7], y[6], y[5], y[0], y[3], y[1],
-   --            z[7], z[6], z[5], z[0], z[3], z[1],
-   --            &dvdx[4], &dvdy[4], &dvdz[4]);
-   --    VoluDer(x[4], x[7], x[6], x[1], x[0], x[2],
-   --            y[4], y[7], y[6], y[1], y[0], y[2],
-   --            z[4], z[7], z[6], z[1], z[0], z[2],
-   --            &dvdx[5], &dvdy[5], &dvdz[5]);
-   --    VoluDer(x[5], x[4], x[7], x[2], x[1], x[3],
-   --            y[5], y[4], y[7], y[2], y[1], y[3],
-   --            z[5], z[4], z[7], z[2], z[1], z[3],
-   --            &dvdx[6], &dvdy[6], &dvdz[6]);
-   --    VoluDer(x[6], x[5], x[4], x[3], x[2], x[0],
-   --            y[6], y[5], y[4], y[3], y[2], y[0],
-   --            z[6], z[5], z[4], z[3], z[2], z[0],
-   --            &dvdx[7], &dvdy[7], &dvdz[7]);
-   -- }
+   --x static inline
+   --x void CalcElemVolumeDerivative(Real_t dvdx[8],
+   --x                               Real_t dvdy[8],
+   --x                               Real_t dvdz[8],
+   --x                               const Real_t x[8],
+   --x                               const Real_t y[8],
+   --x                               const Real_t z[8])
+   --x {
+   procedure CalcElemVolumeDerivative
+     (Dvd : out NodesPerElement_Coordinate_Array;
+        Nodes : in  NodesPerElement_Coordinate_Array)
+       with Inline is
+   begin
+      --x    VoluDer(x[1], x[2], x[3], x[4], x[5], x[7],
+      --x            y[1], y[2], y[3], y[4], y[5], y[7],
+      --x            z[1], z[2], z[3], z[4], z[5], z[7],
+      --x            &dvdx[0], &dvdy[0], &dvdz[0]);
+      --x    VoluDer(x[2], x[3], x[0], x[5], x[6], x[4],
+      --x            y[2], y[3], y[0], y[5], y[6], y[4],
+      --x            z[2], z[3], z[0], z[5], z[6], z[4],
+      --x            &dvdx[1], &dvdy[1], &dvdz[1]);
+      --x    VoluDer(x[3], x[0], x[1], x[6], x[7], x[5],
+      --x            y[3], y[0], y[1], y[6], y[7], y[5],
+      --x            z[3], z[0], z[1], z[6], z[7], z[5],
+      --x            &dvdx[2], &dvdy[2], &dvdz[2]);
+      --x    VoluDer(x[0], x[1], x[2], x[7], x[4], x[6],
+      --x            y[0], y[1], y[2], y[7], y[4], y[6],
+      --x            z[0], z[1], z[2], z[7], z[4], z[6],
+      --x            &dvdx[3], &dvdy[3], &dvdz[3]);
+      --x    VoluDer(x[7], x[6], x[5], x[0], x[3], x[1],
+      --x            y[7], y[6], y[5], y[0], y[3], y[1],
+      --x            z[7], z[6], z[5], z[0], z[3], z[1],
+      --x            &dvdx[4], &dvdy[4], &dvdz[4]);
+      --x    VoluDer(x[4], x[7], x[6], x[1], x[0], x[2],
+      --x            y[4], y[7], y[6], y[1], y[0], y[2],
+      --x            z[4], z[7], z[6], z[1], z[0], z[2],
+      --x            &dvdx[5], &dvdy[5], &dvdz[5]);
+      --x    VoluDer(x[5], x[4], x[7], x[2], x[1], x[3],
+      --x            y[5], y[4], y[7], y[2], y[1], y[3],
+      --x            z[5], z[4], z[7], z[2], z[1], z[3],
+      --x            &dvdx[6], &dvdy[6], &dvdz[6]);
+      --x    VoluDer(x[6], x[5], x[4], x[3], x[2], x[0],
+      --x            y[6], y[5], y[4], y[3], y[2], y[0],
+      --x            z[6], z[5], z[4], z[3], z[2], z[0],
+      --x            &dvdx[7], &dvdy[7], &dvdz[7]);
+      Dvd (0) := VoluDer (Nodes, (1, 2, 3, 4, 5, 7));
+      Dvd (1) := VoluDer (Nodes, (2, 3, 0, 5, 6, 4));
+      Dvd (2) := VoluDer (Nodes, (3, 0, 1, 6, 7, 5));
+      Dvd (3) := VoluDer (Nodes, (0, 1, 2, 7, 4, 6));
+      Dvd (4) := VoluDer (Nodes, (7, 6, 5, 0, 3, 1));
+      Dvd (5) := VoluDer (Nodes, (4, 7, 6, 1, 0, 2));
+      Dvd (6) := VoluDer (Nodes, (5, 4, 7, 2, 1, 3));
+      Dvd (7) := VoluDer (Nodes, (6, 5, 4, 3, 2, 0));
+      --x }
+   end CalcElemVolumeDerivative;
 
-   -- /******************************************/
+   --- /******************************************/
 
    -- static inline
    -- void CalcElemFBHourglassForce(Real_t *xd, Real_t *yd, Real_t *zd,  Real_t hourgam[][4],
@@ -1328,29 +1396,44 @@ package body LULESH is
 
    -- /******************************************/
 
-   -- static inline
-   -- void CalcHourglassControlForElems(Domain& domain,
-   --                                   Real_t determ[], Real_t hgcoef)
-   -- {
-   --    Index_t numElem = domain.numElem() ;
-   --    Index_t numElem8 = numElem * 8 ;
+   --x static inline
+   --x void CalcHourglassControlForElems(Domain& domain,
+   --x                                   Real_t determ[], Real_t hgcoef)
+   --x {
+   procedure CalcHourglassControlForElems
+     (Domain       : in out Domain_Record;
+      determinants : in Element_Determinant_Array_Access;
+      Hgcoef       : in Dimensionless)
+     with Inline
+   is
+   --x    Index_t numElem = domain.numElem() ;
+   --x    Index_t numElem8 = numElem * 8 ;
    --    Real_t *dvdx = Allocate<Real_t>(numElem8) ;
    --    Real_t *dvdy = Allocate<Real_t>(numElem8) ;
    --    Real_t *dvdz = Allocate<Real_t>(numElem8) ;
    --    Real_t *x8n  = Allocate<Real_t>(numElem8) ;
    --    Real_t *y8n  = Allocate<Real_t>(numElem8) ;
    --    Real_t *z8n  = Allocate<Real_t>(numElem8) ;
+      NumElem  : constant Element_Index := Domain.NumElem;
+      NumElem8 : constant Element_Index := Domain.NumElem * 8;
+   begin
+      ---    /* start loop over elements */
+      -- #pragma omp parallel for firstprivate(numElem)
+      --x    for (Index_t i=0 ; i<numElem ; ++i){
+      for Element in Domain.Elements'Range loop
+         declare
+            --x       Real_t  x1[8],  y1[8],  z1[8] ;
+            --x       Real_t pfx[8], pfy[8], pfz[8] ;
+            Node_Coords : NodesPerElement_Coordinate_Array;
+            Derivatives : NodesPerElement_Coordinate_Array;
+            --x       Index_t* elemToNode = domain.nodelist(i);
+            begin
+            --x       CollectDomainNodesToElemNodes(domain, elemToNode, x1, y1, z1);
+            CollectDomainNodesToElemNodes
+              (Domain, Element, Node_Coords);
 
-   --    /* start loop over elements */
-   -- #pragma omp parallel for firstprivate(numElem)
-   --    for (Index_t i=0 ; i<numElem ; ++i){
-   --       Real_t  x1[8],  y1[8],  z1[8] ;
-   --       Real_t pfx[8], pfy[8], pfz[8] ;
-
-   --       Index_t* elemToNode = domain.nodelist(i);
-   --       CollectDomainNodesToElemNodes(domain, elemToNode, x1, y1, z1);
-
-   --       CalcElemVolumeDerivative(pfx, pfy, pfz, x1, y1, z1);
+   --x       CalcElemVolumeDerivative(pfx, pfy, pfz, x1, y1, z1);
+       CalcElemVolumeDerivative(Derivatives, Node_Coords);
 
    --       /* load into temporary storage for FB Hour Glass control */
    --       for(Index_t ii=0;ii<8;++ii){
@@ -1374,7 +1457,9 @@ package body LULESH is
    --          exit(VolumeError);
    -- #endif
    --       }
-   --    }
+   --x    }
+         end;
+      end loop;
 
    --    if ( hgcoef > Real_t(0.) ) {
    --       CalcFBHourglassForceForElems( domain,
@@ -1389,10 +1474,11 @@ package body LULESH is
    --    Release(&dvdy) ;
    --    Release(&dvdx) ;
 
-   --    return ;
-   -- }
+   --x    return ;
+   --x }
+     end CalcHourglassControlForElems;
 
-   -- /******************************************/
+   --- /******************************************/
 
    --x static inline
    --x void CalcVolumeForceForElems(Domain& domain)
@@ -1658,8 +1744,8 @@ package body LULESH is
       p_new        : Pressure;
       p_old        : Pressure;
       pbvc         : Dimensionless;
-      q_new        : Dimensionless;
-      q_old        : Dimensionless;
+      q_new        : Viscosity;
+      q_old        : Viscosity;
       ql_old       : Dimensionless;
       qq_old       : Dimensionless;
       work         : Energy;
@@ -2462,8 +2548,8 @@ package body LULESH is
    --x {
    procedure CalcEnergyForElems
      (domain      : in out Domain_Record;
-      vnewc       : access Element_Volume_Array;
-      info        : in EOS_Info_Record;
+      vnewc       : access Element_Volume_Relative_Array;
+      info        : in     EOS_Info_Record;
       regElemList : access Element_Element_Index_Array)
      with inline
    is
@@ -2543,21 +2629,34 @@ package body LULESH is
          end;
      end loop;
 
-   -- #pragma omp parallel for firstprivate(length, emin, e_cut)
-   --    for (Index_t i = 0 ; i < length ; ++i) {
-
-   --       e_new[i] += Real_t(0.5) * work[i];
-
-   --       if (FABS(e_new[i]) < e_cut) {
-   --          e_new[i] = Real_t(0.)  ;
-   --       }
-   --       if (     e_new[i]  < emin ) {
-   --          e_new[i] = emin ;
-   --       }
-   --    }
+      -- #pragma omp parallel for firstprivate(length, emin, e_cut)
+      --x    for (Index_t i = 0 ; i < length ; ++i) {
+      --x       e_new[i] += Real_t(0.5) * work[i];
+      --x       if (FABS(e_new[i]) < e_cut) {
+      --x          e_new[i] = Real_t(0.)  ;
+      --x       }
+      --x       if (     e_new[i]  < emin ) {
+      --x          e_new[i] = emin ;
+      --x       }
+      --x    }
+      for I in 0 .. Length - 1 loop
+         declare
+            Elem  : EOS_Element_Info_Record renames Info.Elements (Element);
+         begin
+            Elem.E_New := Elem.E_New + Dimensionless (0.5) * Elem.Work;
+            if Elem.E_New < Domain.Parameters.Energy_Tolerance then
+               Elem.E_New := Energy (0.0);
+            end if;
+            if Elem.E_New < Domain.Parameters.Energy_Floor then
+               Elem.E_New := Domain.Parameters.Energy_Floor;
+            end if;
+         end;
+      end loop;
 
    --    CalcPressureForElems(p_new, bvc, pbvc, e_new, compression, vnewc,
    --                         pmin, p_cut, eosvmax, length, regElemList);
+     CalcPressureForElems(p_new, bvc, pbvc, e_new, compression, vnewc,
+                          pmin, p_cut, eosvmax, length, regElemList);
 
    -- #pragma omp parallel for firstprivate(length, rho0, emin, e_cut)
    --    for (Index_t i = 0 ; i < length ; ++i){
@@ -2633,7 +2732,7 @@ package body LULESH is
    --x {
    procedure CalcSoundSpeedForElems
      (domain      : in out Domain_Record;
-      vnewc       : access Element_Volume_Array;
+      vnewc       : access Element_Volume_Relative_Array;
       rho0        : in Density;
       enewc       : access Element_Energy_Array;
       pnewc       : access Element_Pressure_Array;
@@ -2682,7 +2781,7 @@ package body LULESH is
    --x {
    procedure EvalEOSForElems
      (domain      : in out Domain_Record;
-      vnewc       : access Element_Volume_Array;
+      vnewc       : access Element_Volume_Relative_Array;
       numElemReg  : in     Element_Count;
       regElemList : access Element_Element_Index_Array;
       rep         : in     Cost_Type)
@@ -2763,9 +2862,9 @@ package body LULESH is
                info_element   : EOS_Element_Info_Record renames
                  info.elements (region_element_index);
             begin
-               info_element.e_old  := domain_element.eenergy;
-               info_element.delvc  := domain_element.new_volume_relative_delta;
-               info_element.p_old  := domain_element.epressure;
+               info_element.e_old  := domain_element.Energy;
+               info_element.delvc  := domain_element.New_Volume_Delta;
+               info_element.p_old  := domain_element.Pressure;
                info_element.q_old  := domain_element.artificial_viscosity;
                info_element.qq_old := domain_element.artificial_viscosity_quadratic;
                info_element.ql_old := domain_element.artificial_viscosity_linear;
@@ -2844,9 +2943,12 @@ package body LULESH is
          --x                          qq_old, ql_old, rho0, eosvmax,
          --x                          numElemReg, regElemList);
          for Element in Info.Elements'Range loop
-         info.Elements (Element).Work := Energy (0.0);
+            Info.Elements (Element).Work := Energy (0.0);
          end loop;
-         CalcEnergyForElems (domain, vnewc, info, regElemList);
+         CalcEnergyForElems (domain      => domain,
+                             vnewc       => vnewc,
+                             info        => info,
+                             regElemList => regElemList);
          --x    }
       end loop;
       -- #pragma omp parallel for firstprivate(numElemReg)
@@ -2861,8 +2963,8 @@ package body LULESH is
             element : Element_Record renames
               domain.elements (regElemList (region_element_index));
          begin
-            element.epressure             := info.elements (region_element_index).p_new;
-            element.eenergy              := info.elements (region_element_index).e_new;
+            element.Pressure             := info.elements (region_element_index).p_new;
+            element.Energy               := info.elements (region_element_index).e_new;
             element.artificial_viscosity := info.elements (region_element_index).q_new;
          end;
       end loop;
@@ -2915,7 +3017,7 @@ package body LULESH is
    --x {
    procedure ApplyMaterialPropertiesForElems
      (domain : in out Domain_Record;
-      vnew   : access Element_Volume_Array)
+      vnew   : access Element_Volume_Relative_Array)
      with Inline
    is
       --x    Index_t numElem = domain.numElem() ;
@@ -2927,8 +3029,8 @@ package body LULESH is
             ---     /* Expose all of the variables needed for material evaluation */
             --x     Real_t eosvmin = domain.eosvmin() ;
             --x     Real_t eosvmax = domain.eosvmax() ;
-            eosvmin : constant Volume := domain.parameters.eosvmin;
-            eosvmax : constant Volume := domain.parameters.eosvmax;
+            eosvmin : constant Volume_Relative := domain.parameters.eosvmin;
+            eosvmax : constant Volume_Relative := domain.parameters.eosvmax;
          begin
             -- #pragma omp parallel
             --     {
@@ -2940,7 +3042,7 @@ package body LULESH is
             --x                 vnew[i] = eosvmin ;
             --x           }
             --x        }
-            if eosvmin /= Volume (0.0) then
+            if eosvmin /= Volume_Relative (0.0) then
                for element in 0..numElem-1 loop
                   if vnew(element) < eosvmin then
                      vnew(element) := eosvmin;
@@ -2954,7 +3056,7 @@ package body LULESH is
             --x                 vnew[i] = eosvmax ;
             --x           }
             --x        }
-            if eosvmax /= Volume (0.0) then
+            if eosvmax /= Volume_Relative (0.0) then
                for element in 0..numElem-1 loop
                   if vnew(element) > eosvmax then
                      vnew(element) := eosvmax;
@@ -2985,19 +3087,19 @@ package body LULESH is
             --x        }
             for element in 0..numElem-1 loop
                declare
-                  vc : Volume := domain.elements(element).volume_relative;
+                  vc : Volume_Relative := domain.elements(element).Volume;
                begin
-                  if eosvmin /= Volume (0.0) then
+                  if eosvmin /= Volume_Relative (0.0) then
                      if vc < eosvmin then
                         vc := eosvmin;
                      end if;
                   end if;
-                  if eosvmax /= Volume (0.0) then
+                  if eosvmax /= Volume_Relative (0.0) then
                      if vc > eosvmax then
                         vc := eosvmax;
                      end if;
                   end if;
-                  if vc <= Volume (0.0) then
+                  if vc <= Volume_Relative (0.0) then
                      if USE_MPI then
                         MPI.Abortt (MPI.COMM_WORLD, VolumeError);
                      else
@@ -3060,7 +3162,7 @@ package body LULESH is
    --x {
    procedure UpdateVolumesForElems
      (domain : in out Domain_Record;
-      vnew   : access Element_Volume_Array)
+      vnew   : access Element_Volume_Relative_Array)
      with Inline is
    begin
       --x    if (length != 0) {
@@ -3074,12 +3176,12 @@ package body LULESH is
       --x    }
       for element in vnew'Range loop
          declare
-            tmpV : Volume := vnew (element);
+            tmpV : Volume_Relative := vnew (element);
          begin
-            if abs (tmpV - Volume (1.0)) < domain.parameters.volume_relative_tolerance then
-               tmpV := Volume (1.0);
+            if abs (tmpV - Volume_Relative (1.0)) < domain.parameters.volume_relative_tolerance then
+               tmpV := Volume_Relative (1.0);
             end if;
-            domain.elements (element).volume_relative := tmpV;
+            domain.elements (element).Volume := tmpV;
          end;
       end loop;
       --x    return ;
@@ -3095,11 +3197,11 @@ package body LULESH is
    procedure LagrangeElements (domain : in out domain_record)
      with inline
    is
-      vnew : Element_Volume_Array_Access;
+      vnew : Element_Volume_Relative_Array_Access;
    begin
-      vnew := new Element_Volume_Array (0..domain.numElem-1);
+      vnew := new Element_Volume_Relative_Array (0..domain.numElem-1);
       --x   CalcLagrangeElements(domain, vnew) ;
-      --x   /* Calculate Q.  (Monotonic q option requires communication) */
+      ---   /* Calculate Q.  (Monotonic q option requires communication) */
       --x   CalcQForElems(domain, vnew) ;
       --x   ApplyMaterialPropertiesForElems(domain, vnew) ;
       --x   UpdateVolumesForElems(domain, vnew,
@@ -3153,7 +3255,7 @@ package body LULESH is
       --x       Index_t  courant_elem  = -1 ;
       qqc2          : constant Dimensionless := 64.0 * domain.parameters.qqc**2;
       dtcourant_tmp : Time_Span := domain.variables.dtcourant;
-      -- Picking an unlikely number instead of -1:
+      --- Picking an unlikely number instead of -1:
       NEVER_SET     : constant Element_Count := 2_000_000_003;
       courant_elem  : Element_Count := NEVER_SET;
 
@@ -3188,7 +3290,8 @@ package body LULESH is
               Domain.Elements (element).Characteristic_Length;
          begin
             if vdov < Compression (0.0) then
-               dtf := Arealg / SQRT(ss**2 + qqc2 * arealg**2 * vdov**2);
+               dtf := Arealg / SQRT
+                  (ss ** 2 + qqc2 * Velocity (Arealg) ** 2 * Dimensionless (Vdov) ** 2);
             else
                dtf := Arealg / abs(ss);
             end if;
@@ -3380,7 +3483,7 @@ package body LULESH is
       --x #ifdef SEDOV_SYNC_POS_VEL_LATE
       --x    Domain_member fieldData[6] ;
       --x #endif
-      fieldData : Domain_member (0..6);
+      fieldData : LULESH.Comm.Domain_member_Array (0..6);
    begin
 
       ---    /* calculate nodal forces, accelerations, velocities, positions, with
@@ -3422,12 +3525,6 @@ package body LULESH is
                     dz         => domain.parameters.size (Z) + 1,
                     doRecv     => false,
                     planeOnly  => false);
-      --    fieldData[0] = &Domain::x ;
-      --    fieldData[1] = &Domain::y ;
-      --    fieldData[2] = &Domain::z ;
-      --    fieldData[3] = &Domain::xd ;
-      --    fieldData[4] = &Domain::yd ;
-      --    fieldData[5] = &Domain::zd ;
          Comm.Send (domain     => domain,
                     msgType    => MSG_SYNC_POS_VEL,
                     xferFields => 6,
