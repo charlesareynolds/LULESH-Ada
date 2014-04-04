@@ -1,4 +1,5 @@
 with Ada.Calendar;
+with Ada.Exceptions;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Numerics.Generic_Real_Arrays;
 with Ada.Real_Time;
@@ -206,11 +207,11 @@ package LULESH is
    type FacesPerNode_Element_Index_Array is
      array (Face_Range) of Element_Index;
 
-   type NodesPerElement_Element_Index_Array is
+   type NodesPerElement_Node_Index_Array is
      array (NodesPerElement_Range) of Node_Index;
 
-   type NodesPerElement_Element_Index_Array_Array is
-     array (Element_Index range <>) of NodesPerElement_Element_Index_Array;
+   type NodesPerElement_Node_Index_Array_Array is
+     array (Element_Index range <>) of NodesPerElement_Node_Index_Array;
 
    type NodesPerFace_NodesPerElement_Array is
      array (NodesPerFace_Range) of NodesPerElement_Range;
@@ -377,8 +378,8 @@ package LULESH is
 
    subtype Acceleration  is Mks_Type 
    with Dimension => (Meter => 1, Second => -2, others => 0);
-   subtype Density       is Mks_Type 
-   with Dimension => (Kilogram => 1, Meter => -3, others => 0);
+--     subtype Density       is Mks_Type 
+--     with Dimension => (Kilogram => 1, Meter => -3, others => 0);
    -- For components and variables named "Energy":
    subtype Energy_Type   is Energy;
    -- For components and variables named "Mass";
@@ -388,7 +389,7 @@ package LULESH is
    subtype Time_Span     is Time;
    subtype Velocity      is Speed;
    -- For components and variables named "Volume";
-   subtype Volume_Type   is Volume;
+   subtype Volume_Type   is SI.Volume;
 
    --SI   subtype Area         is Square_Meters;
    --SI   subtype Acceleration is Meters_Per_Second_Per_Second;
@@ -403,16 +404,16 @@ package LULESH is
 
    --- Multiply a dimensionless quantity by one of these to get a dimensioned quantity:
    m2    : constant Area         := Area (1.0);
-   m3    : constant Volume       := Volume (1.0);
+--     m3    : constant Volume       := Volume (1.0);
    mps   : constant Velocity     := Velocity (1.0);
    mps2  : constant Acceleration := Acceleration (1.0);
+   
+   
+   subtype Density          is Mks_Type;
    kgpm3 : constant Density      := Density (1.0);
-   
-   --- 1/Volume:
-   subtype Compression is Mks_Type 
-   with Dimension => (Meter => -3, others => 0);
-   
    subtype Dimensionless    is Mks_Type;
+   --- 1/Volume_Relative:
+   subtype Compression      is Dimensionless;
    subtype Derivative_Type  is Dimensionless;
    subtype Determinant_Type is Dimensionless;
    subtype Gradient_Type    is Dimensionless;
@@ -585,7 +586,7 @@ package LULESH is
 
    type Element_Record is record
    --x    std::vector<Index_t>  m_nodelist ;     /* elemToNode connectivity */
-      Node_Indexes : NodesPerElement_Element_Index_Array;
+      Node_Indexes : NodesPerElement_Node_Index_Array;
       --x    std::vector<Index_t>  m_lxim ;  /* element connectivity across each face */
       --x    std::vector<Index_t>  m_lxip ;
       --x    std::vector<Index_t>  m_letam ;
@@ -629,7 +630,7 @@ package LULESH is
       Volume_Reference : Volume_Type;
       New_Volume       : Volume_Relative;
       New_Volume_Delta : Volume_Relative;
-      --!! delta relative volume over reference volume?  delv/volo?:
+      --!! delta relative volume over (not reference) volume?  delv/volo?:
       Volume_Derivative_Over_Volume : Compression;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
       Characteristic_Length         : Length;
@@ -814,6 +815,8 @@ package LULESH is
 --     type Domain_member is access all Real_Type;
 
 private
+   package AEX renames Ada.Exceptions;
+   
    Time_Span_First : constant Time_Span := Time_Span'First;
    Time_Span_Last  : constant Time_Span := Time_Span'Last;
    Time_Span_Zero  : constant Time_Span := 0.0 * s;
@@ -859,4 +862,8 @@ private
    procedure LagrangeLeapFrog (domain : in out Domain_Record) 
      with Inline;
 
-end LULESH;
+   procedure Abort_Or_Raise
+     (X       : in AEX.Exception_Id;
+      Message : in String);
+
+   end LULESH;

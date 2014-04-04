@@ -69,15 +69,15 @@ begin
    --x    opts.balance = 1;
    --x    opts.cost = 1;
    opts :=
-     (its      => 9999999,
-      side_length       => 30,
-      numReg   => 11,
-      numFiles => (Int_t(numRanks)+10)/9,
-      showProg => False,
-      quiet    => False,
-      viz      => False,
-      balance  => 1,
-      cost     => 1);
+     (its         => 9999999,
+      side_length => 30,
+      numReg      => 11,
+      numFiles    => (Int_t (numRanks)+10) / 9,
+      showProg    => False,
+      quiet       => False,
+      viz         => False,
+      Balance     => 1,
+      Cost        => 1);
    --x    ParseCommandLineOptions(argc, argv, myRank, &opts);
    LULESH.Util.ParseCommandLineOptions(myRank, opts);
    --x    if ((myRank == 0) && (opts.quiet == 0)) {
@@ -173,7 +173,7 @@ begin
         (domain     => locDom,
          msgType    => MSG_COMM_SBN,
          xferFields => 1,
-         fieldData  => fieldData,
+         fieldData  => (0 => FieldData),
          dx         => locDom.parameters.size(X) + 1,
          dy         => locDom.parameters.size(Y) + 1,
          dz         => locDom.parameters.size(Z) + 1,

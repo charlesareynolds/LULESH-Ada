@@ -1,4 +1,3 @@
-with LULESH.Comm;
 --- /*
 ---   This is a Version 2.0 MPI + OpenMP Beta implementation of LULESH
 
@@ -161,6 +160,8 @@ with LULESH.Comm;
 -- # include <omp.h>
 -- #endif
 
+with LULESH.Comm;
+with OMP;
 
 package body LULESH is
 
@@ -334,7 +335,7 @@ package body LULESH is
       Element_Node_Coords : out NodesPerElement_Coordinate_Array)
      with Inline
    is
-      Element_Node_Indexes : constant NodesPerElement_Element_Index_Array :=
+      Element_Node_Indexes : constant NodesPerElement_Node_Index_Array :=
         Domain.Elements (Element).Node_Indexes;
    begin
       for Element_Node in Element_Node_Indexes'Range loop
@@ -764,7 +765,7 @@ package body LULESH is
       --x #else
       --x    Index_t numthreads = 1;
       --x #endif
-      numthreads : constant Index_Type :=
+      numthreads : constant OMP.Thread_Count :=
         (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Max_Threads else 1);
 
       --x    Index_t numElem8 = numElem * 8 ;
@@ -776,6 +777,52 @@ package body LULESH is
       --x    Real_t fz_local[8] ;
       f_elem             : Element_NodesPerElement_Force_Vector_Array_Array_Access;
       local_nodes_forces : NodesPerElement_Force_Vector_Array;
+      use type OMP.Thread_Count;
+
+      --x   if (numthreads > 1) {
+      ---      // If threaded, then we need to copy the data out of the temporary
+      ---      // arrays used above into the final forces field
+      --- #pragma omp parallel for firstprivate(numNode)
+      --x      for( Index_t gnode=0 ; gnode<numNode ; ++gnode )
+      --x      {
+      --x         Index_t count = domain.nodeElemCount(gnode) ;
+      --x         Index_t *cornerList = domain.nodeElemCornerList(gnode) ;
+      --x         Real_t fx_tmp = Real_t(0.0) ;
+      --x         Real_t fy_tmp = Real_t(0.0) ;
+      --x         Real_t fz_tmp = Real_t(0.0) ;
+      --x         for (Index_t i=0 ; i < count ; ++i) {
+      --x            Index_t elem = cornerList[i] ;
+      --x            fx_tmp += fx_elem[elem] ;
+      --x            fy_tmp += fy_elem[elem] ;
+      --x            fz_tmp += fz_elem[elem] ;
+      --x         }
+      --         domain.fx(gnode) = fx_tmp ;
+      --         domain.fy(gnode) = fy_tmp ;
+      --         domain.fz(gnode) = fz_tmp ;
+      --      }
+      --      Release(&fz_elem) ;
+      --      Release(&fy_elem) ;
+      --      Release(&fx_elem) ;
+      --x   }
+      procedure Copy_Data_Out_If_Threaded is
+      begin
+         if Numthreads > 1 then
+            for Node in Domain.Nodes'Range loop
+               declare
+                  CornerList : Element_Element_Index_Array_Access :=
+                    Domain.NodeElemCornerList (Node);
+                  F_Tmp : Force_Vector := (others => 0.0);
+               begin
+                  for I in CornerList'Range loop
+                     F_Tmp := F_Tmp + F_Elem (CornerList (I));
+                  end loop;
+                  Domain.Nodes (Node).Force := F_Tmp;
+               end;
+            end loop;
+            Release (F_Elem);
+         end if;
+      end Copy_Data_Out_If_Threaded;
+
    begin
       --x   if (numthreads > 1) {
       --x      fx_elem = Allocate<Real_t>(numElem8) ;
@@ -800,7 +847,7 @@ package body LULESH is
             --x     Real_t y_local[8] ;
             --x     Real_t z_local[8] ;
             element_node_coords  : NodesPerElement_Coordinate_Array;
-            element_node_indexes : constant NodesPerElement_Element_Index_Array
+            element_node_indexes : constant NodesPerElement_Node_Index_Array
               := domain.elements(element).node_indexes;
             B                    : NodesPerElement_Area_Vector_Array;
             shape_function_areas : Derivative_Cartesian_Real_Array;
@@ -876,59 +923,11 @@ package body LULESH is
          --x   }
       end loop;
 
-      --x   if (numthreads > 1) {
-      ---      // If threaded, then we need to copy the data out of the temporary
-      ---      // arrays used above into the final forces field
-      --- #pragma omp parallel for firstprivate(numNode)
-      --x      for( Index_t gnode=0 ; gnode<numNode ; ++gnode )
-      --x      {
-      --x         Index_t count = domain.nodeElemCount(gnode) ;
-      --x         Index_t *cornerList = domain.nodeElemCornerList(gnode) ;
-      --x         Real_t fx_tmp = Real_t(0.0) ;
-      --x         Real_t fy_tmp = Real_t(0.0) ;
-      --x         Real_t fz_tmp = Real_t(0.0) ;
-      --         for (Index_t i=0 ; i < count ; ++i) {
-      --            Index_t elem = cornerList[i] ;
-      --            fx_tmp += fx_elem[elem] ;
-      --            fy_tmp += fy_elem[elem] ;
-      --            fz_tmp += fz_elem[elem] ;
-      --         }
-      --         domain.fx(gnode) = fx_tmp ;
-      --         domain.fy(gnode) = fy_tmp ;
-      --         domain.fz(gnode) = fz_tmp ;
-      --      }
-      --      Release(&fz_elem) ;
-      --      Release(&fy_elem) ;
-      --      Release(&fx_elem) ;
-      --x   }
-      if Numthreads > 1 then
-      ---      // If threaded, then we need to copy the data out of the temporary
-      ---      // arrays used above into the final forces field
-         for Gnode in 0 .. Numnode - 1 loop
-            declare
-               Count      : Element_Index := domain.nodeElemCount(gnode);
-               CornerList : Element_Element_Index_Array_Access :=
-                 Domain.NodeElemCornerList (Gnode);
-               F_Tmp : Coordinate_Vector := (others => Length (0.0));
-            begin
-               for I in 0 .. Count - 1 loop
-                  declare
-                     Element : Constant Element_Index := CornerList (I);
-                  begin
-                     for XYZ in Cartesian_Axes loop
-                        F_Tmp (XYZ) := F_Tmp (XYZ) + F_Elem(Element)(XYZ);
-                     end loop;
-                     F (Gnode) := F_Tmp;
-                  end;
-               end loop;
-            end;
-
-         end loop;
-      end if;
+      Copy_Data_Out_If_Threaded;
       --x }
    end IntegrateStressForElems;
 
-   -- /******************************************/
+   --- /******************************************/
 
    twelfth : constant := 1.0 / 12.0;
 
@@ -939,15 +938,15 @@ package body LULESH is
    subtype Volume_Derivitave_Coordinate_Input_Array is
      Node_Coordinate_Array (Derivitave_Input_Range);
 
-   -- static inline
-   -- void VoluDer(const Real_t x0, const Real_t x1, const Real_t x2,
-   --              const Real_t x3, const Real_t x4, const Real_t x5,
-   --              const Real_t y0, const Real_t y1, const Real_t y2,
-   --              const Real_t y3, const Real_t y4, const Real_t y5,
-   --              const Real_t z0, const Real_t z1, const Real_t z2,
-   --              const Real_t z3, const Real_t z4, const Real_t z5,
-   --              Real_t* dvdx, Real_t* dvdy, Real_t* dvdz)
-   -- {
+   --x static inline
+   --x void VoluDer(const Real_t x0, const Real_t x1, const Real_t x2,
+   --x              const Real_t x3, const Real_t x4, const Real_t x5,
+   --x              const Real_t y0, const Real_t y1, const Real_t y2,
+   --x              const Real_t y3, const Real_t y4, const Real_t y5,
+   --x              const Real_t z0, const Real_t z1, const Real_t z2,
+   --x              const Real_t z3, const Real_t z4, const Real_t z5,
+   --x              Real_t* dvdx, Real_t* dvdy, Real_t* dvdz)
+   --x {
    function VoluDer
      (Nodes        : in NodesPerElement_Coordinate_Array;
       Node_Indexes : in Input_Index_Array)
@@ -1451,11 +1450,13 @@ package body LULESH is
 
    --       /* Do a check for negative volumes */
    --       if ( domain.v(i) <= Real_t(0.0) ) {
-   -- #if USE_MPI
-   --          MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
-   -- #else
-   --          exit(VolumeError);
-   -- #endif
+   --x #if USE_MPI
+   --x          MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
+   --x #else
+   --x          exit(VolumeError);
+   --x #endif
+         Abort_Or_Raise
+           (Coding_Error'Identity, "Negative Volume");
    --       }
    --x    }
          end;
@@ -1517,17 +1518,17 @@ package body LULESH is
             -- #pragma omp parallel for firstprivate(numElem)
             --x       for ( Index_t k=0 ; k<numElem ; ++k ) {
             --x          if (determ[k] <= Real_t(0.0)) {
-            -- #if USE_MPI
-            --             MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
-            -- #else
+            --x #if USE_MPI
+            --x             MPI_Abort(MPI_COMM_WORLD, VolumeError) ;
+            --x #else
             --x             exit(VolumeError);
-            -- #endif
-            --          }
-            --       }
+            --x #endif
+            --x          }
+            --x       }
             for element in determinants'Range loop
                if determinants(element) <= 0.0 then
-                  raise Coding_Error
-                    with "VolumeError";
+                  Abort_Or_Raise
+                    (Coding_Error'Identity, "Negative determinant");
                end if;
             end loop;
 
@@ -1735,10 +1736,10 @@ package body LULESH is
    --- /******************************************/
 
    type EOS_Element_Info_Record is record
-      bvc          : Compression;
+      bvc          : Dimensionless;
       compHalfStep : Compression;
       compressionn : Compression;
-      delvc        : Volume;
+      delvc        : Volume_Relative;
       e_new        : Energy;
       e_old        : Energy;
       p_new        : Pressure;
@@ -1760,12 +1761,12 @@ package body LULESH is
       elements : EOS_Element_Info_Array_Access := new EOS_Element_Info_Array (0 .. numElem - 1);
       e_cut    : Energy;
       emin     : Energy;
-      eosvmax  : Volume;
-      eosvmin  : Volume;
+      eosvmax  : Volume_Relative;
+      eosvmin  : Volume_Relative;
       p_cut    : Pressure;
       pmin     : Pressure;
       q_cut    : Pressure;
-      rho0     : Density;
+      rho0     : Dimensionless; -- Density?
       ss4o3    : Dimensionless;
    end record;
 
@@ -2565,15 +2566,17 @@ package body LULESH is
       --x          e_new[i] = emin ;
       --x       }
       --x    }
-      for element in info.elements'Range loop
-         info.elements (element).e_new :=
-           info.elements (element).e_old  -
-           0.5 * info.elements (element).delvc * (info.elements (element).p_old
-                                                  + Pressure(info.elements (element).q_old))
-           + 0.5 * info.elements (element).work;
-         if info.elements (element).e_new < info.emin then
-            info.elements (element).e_new := info.emin;
-         end if;
+      for Element in Info.Elements'Range loop
+         declare
+            Elem : EOS_Element_Info_Record renames Info.Elements (Element);
+         begin
+            Elem.E_New := Elem.E_Old
+              - 0.5 * Energy(Elem.Delvc * (Elem.P_Old + Pressure (Elem.Q_Old)))
+              + 0.5 * Elem.Work;
+            if Elem.E_New < Info.Emin then
+               Elem.E_New := Info.Emin;
+            end if;
+         end;
       end loop;
       --x    CalcPressureForElems(pHalfStep, bvc, pbvc, e_new, compHalfStep, vnewc,
       --x                         pmin, p_cut, eosvmax, length, regElemList);
@@ -2601,17 +2604,17 @@ package body LULESH is
       --x    }
       for element in info.elements'Range loop
          declare
-            elem  : EOS_Element_Info_Record renames info.elements (element);
-            vhalf : constant Volume := Volume
-              (1.0 / (Compression (1.0) + elem.compHalfStep));
+            Elem  : EOS_Element_Info_Record renames Info.Elements (Element);
+            Vhalf : constant Volume_Relative :=
+              1.0 / (1.0 + Elem.CompHalfStep);
          begin
-            if elem.delvc > Volume (0.0) then
+            if elem.delvc > Volume_Relative (0.0) then
                elem.q_new := 0.0;
             else
                declare
                   ssc : Dimensionless :=
                     (elem.pbvc * elem.e_new
-                      + vhalf**2 * elem.bvc * pHalfStep (element))
+                     + Vhalf ** 2 * Elem.Bvc * PHalfStep (Element))
                       / Info.Rho0;
                begin
                   if ssc <= 0.1111111e-36 then
@@ -2623,9 +2626,9 @@ package body LULESH is
                     + elem.qq_old;
                end;
             end if;
-            elem.e_new := elem.e_new + 0.5 * elem.delvc
-              * (3.0*(elem.p_old + Pressure(elem.q_old))
-                 - 4.0*(pHalfStep (element) + Pressure(elem.q_new)));
+            Elem.E_New := Elem.E_New + 0.5 * Elem.Delvc
+              * (3.0 * (Elem.P_Old + Pressure (Elem.Q_Old))
+                 - 4.0 * (PHalfStep (Element) + Pressure (Elem.Q_New)));
          end;
      end loop;
 
@@ -2639,7 +2642,7 @@ package body LULESH is
       --x          e_new[i] = emin ;
       --x       }
       --x    }
-      for I in 0 .. Length - 1 loop
+      for Element in Info.Elements'Range loop
          declare
             Elem  : EOS_Element_Info_Record renames Info.Elements (Element);
          begin
@@ -3100,12 +3103,8 @@ package body LULESH is
                      end if;
                   end if;
                   if vc <= Volume_Relative (0.0) then
-                     if USE_MPI then
-                        MPI.Abortt (MPI.COMM_WORLD, VolumeError);
-                     else
-                        raise Coding_Error
-                          with "VolumeError";
-                     end if;
+                     Abort_Or_Raise
+                       (Coding_Error'Identity, "Negative volume");
                   end if;
                   end;
             end loop;
@@ -3549,5 +3548,24 @@ package body LULESH is
       end if;
       --x }
    end LagrangeLeapFrog;
+
+   -----------------------
+   --- EXPORTED (private):
+   -----------------------
+   procedure Abort_Or_Raise
+     (X       : in AEX.Exception_Id;
+      Message : in String) is
+   begin
+      --z #if USE_MPI
+      --z       MPI_Abort(MPI_COMM_WORLD, -1) ;
+      --z #else
+      --x       exit(-1);
+      --z #endif
+      if USE_MPI then
+         MPI.Abortt (MPI.COMM_WORLD, MPI.Errorcode_Type (-1));
+      else
+         AEX.Raise_Exception (X, Message);
+      end if;
+   end Abort_Or_Raise;
 
 end LULESH;

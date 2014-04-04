@@ -12,13 +12,12 @@
 --x #include <cstdlib>
 --x #include "lulesh.h"
 
-with Ada.Exceptions;
 with Ada.Numerics.Float_Random;
 with LULESH.Par;
+with OMP;
 
 package body LULESH.Init is
 
-   package AEX renames Ada.Exceptions;
 
    package Random_Selection is
 
@@ -74,22 +73,6 @@ package body LULESH.Init is
      (Modulo : in Cost_Type)
       return Cost_Type is
      (Cost_Type (Random_Selection.Choose_Rem (Integer (Modulo))));
-
-   procedure Abort_Or_Raise
-     (X       : in AEX.Exception_Id;
-      Message : in String) is
-   begin
-      --z #if USE_MPI
-      --z       MPI_Abort(MPI_COMM_WORLD, -1) ;
-      --z #else
-      --x       exit(-1);
-      --z #endif
-      if USE_MPI then
-         MPI.Abortt (MPI.COMM_WORLD, MPI.Errorcode_Type (-1));
-      else
-         AEX.Raise_Exception (X, Message);
-      end if;
-   end Abort_Or_Raise;
 
    ---    public:
 
@@ -249,8 +232,8 @@ package body LULESH.Init is
          Qlc_Monoq                  => 0.5,
          Qqc_Monoq                  => 2.0 / 3.0,
          Qqc                        => 2.0,
-         Eosvmax                    => 1.0e+9 * M3,
-         Eosvmin                    => 1.0e-9 * M3,
+         Eosvmax                    => 1.0e+9,
+         Eosvmin                    => 1.0e-9,
          Pressure_Floor             => 0.0 * Pa,
          Energy_Floor               => -1.0e+15 * J,
          Dvovmax                    => Compression (0.1),
@@ -417,7 +400,7 @@ package body LULESH.Init is
       for Element in 0 .. This.NumElem - 1 loop
          declare
             Local_Coords : NodesPerElement_Coordinate_Array;
-            ElemToNode   : constant NodesPerElement_Element_Index_Array :=
+            ElemToNode   : constant NodesPerElement_Node_Index_Array :=
               This.Elements (Element).Node_Indexes;
          begin
             for Node in NodesPerElement_Range loop
@@ -601,7 +584,7 @@ package body LULESH.Init is
       --x #else
       --x    Index_t numthreads = 1;
       --x #endif
-      Numthreads         : constant Index_Type :=
+      Numthreads         : constant OMP.Thread_Count :=
         (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Max_Threads else 1);
       --- Number of elements each node is in. Interior nodes are in 8 elements,
       --- faces 4, edges 2, and corners 1:
@@ -613,8 +596,6 @@ package body LULESH.Init is
 
       procedure Count_Elements_For_Each_Node is
       begin
-         NodeElemCounts := new Node_Element_Index_Array (0 .. This.NumNode - 1);
-         NodeElemCounts.all := (others => 0);
          --x     for (Index_t i=0; i<numElem(); ++i) {
          --x       Index_t *nl = nodelist(i) ;
          --x       for (Index_t j=0; j < 8; ++j) {
@@ -624,10 +605,10 @@ package body LULESH.Init is
          for Element in This.Elements'Range loop
             for Enode in NodesPerElement_Range loop
                declare
-                  Necount : Element_Index renames
+                  Count : Element_Index renames
                     NodeElemCounts (This.Elements (Element).Node_Indexes (Enode));
                begin
-                  Necount := Necount + 1;
+                  Count := Count + 1;
                end;
             end loop;
          end loop;
@@ -714,19 +695,17 @@ package body LULESH.Init is
                     NodeElemCornerList (Element);
                begin
                   if Clv > Max_ClSize then
-                     if USE_MPI then
-                        MPI.Abortt (MPI.COMM_WORLD, MPI.Errorcode_Type (-1));
-                     else
-                        raise Coding_Error with
-                          "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!" &
-                          "  i:" & Element'Img & " clv:" & Clv'Img;
-                     end if;
+                     Abort_Or_Raise
+                       (Coding_Error'Identity,
+                        "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!" &
+                          "  i:" & Element'Img & " clv:" & Clv'Img);
                   end if;
                end;
             end loop;
          end;
       end Check_Each_Nodes_Per_Element_Offset;
 
+      use type OMP.Thread_Count;
    begin
       --x   if (numthreads > 1) {
       ---     // set up node-centered indexing of elements
@@ -734,19 +713,21 @@ package body LULESH.Init is
       --x     for (Index_t i=0; i<numNode(); ++i) {
       --x       nodeElemCount[i] = 0 ;
       --x     }
+      --x     delete [] nodeElemCount ;
+      --x   }
+      --x   else {
+      ---     // These arrays are not used if we're not threaded
+      --x     m_nodeElemStart = NULL;
+      --x     m_nodeElemCornerList = NULL;
       if Numthreads > 1 then
+         NodeElemCounts := new Node_Element_Index_Array'
+           (0 .. This.NumNode - 1 => 0);
          Count_Elements_For_Each_Node;
          Calc_First_Element_For_Each_Node;
          Calc_Nodes_Per_Element_Offset_For_Each_Corner;
          Check_Each_Nodes_Per_Element_Offset;
-         --x     delete [] nodeElemCount ;
          Release (NodeElemCounts);
-         --x   }
-         --x   else {
       else
-         ---     // These arrays are not used if we're not threaded
-         --x     m_nodeElemStart = NULL;
-         --x     m_nodeElemCornerList = NULL;
          NodeElemStart      := null;
          NodeElemCornerList := null;
          --x   }
@@ -849,7 +830,7 @@ package body LULESH.Init is
                      if TV.At_Limit (Row, Row_Min_Max) and then
                        TV.At_Limit (Col, Col_Min_Max) and then
                        TV.At_Limit (Plane, Plane_Min_Max) then
-                        ComBufSize := ComBufSize + Edge_Buffer_Size;
+                        ComBufSize := ComBufSize + Corner_Buffer_Size;
                      end if;
                   end loop;
                end loop;
@@ -1450,11 +1431,11 @@ package body LULESH.Init is
       --x    testProcs = Int_t(cbrt(Real_t(numRanks))+0.5) ;
       --x    if (testProcs*testProcs*testProcs != numRanks) {
       --x       printf("Num processors must be a cube of an integer (1, 8, 27, ...)\n") ;
-      --z #if USE_MPI
-      --z       MPI_Abort(MPI_COMM_WORLD, -1) ;
-      --z #else
+      --x #if USE_MPI
+      --x       MPI_Abort(MPI_COMM_WORLD, -1) ;
+      --x #else
       --x       exit(-1);
-      --z #endif
+      --x #endif
       --x    }
       --!! same as c++?:
       Ranks_Root := Rank_Type (Cbrt (Real10 (NumRanks)));
@@ -1480,15 +1461,16 @@ package body LULESH.Init is
       end if;
       --x    if (MAX_FIELDS_PER_MPI_COMM > CACHE_COHERENCE_PAD_REAL) {
       --x       printf("corner element comm buffers too small.  Fix code.\n") ;
-      -- #if USE_MPI
-      --       MPI_Abort(MPI_COMM_WORLD, -1) ;
-      -- #else
+      --x #if USE_MPI
+      --x       MPI_Abort(MPI_COMM_WORLD, -1) ;
+      --x #else
       --x       exit(-1);
-      -- #endif
+      --x #endif
       --x    }
       if MAX_FIELDS_PER_MPI_COMM > CACHE_COHERENCE_PAD_REAL then
-         raise Coding_Error
-           with "corner element comm buffers too small.  Fix code.";
+         Abort_Or_Raise
+           (Coding_Error'Identity,
+            "corner element comm buffers too small.  Fix code.");
       end if;
       --x    dx = testProcs ;
       --x    dy = testProcs ;
@@ -1496,20 +1478,20 @@ package body LULESH.Init is
       ---    // temporary test
       --x    if (dx*dy*dz != numRanks) {
       --x       printf("error -- must have as many domains as procs\n") ;
-      -- #if USE_MPI
-      --       MPI_Abort(MPI_COMM_WORLD, -1) ;
-      -- #else
+      --x #if USE_MPI
+      --x       MPI_Abort(MPI_COMM_WORLD, -1) ;
+      --x #else
       --x       exit(-1);
-      -- #endif
+      --x #endif
       --x    }
       Dx := Domain_Index (Ranks_Root);
       Dy := Domain_Index (Ranks_Root);
       Dz := Domain_Index (Ranks_Root);
       Dxyz := Dx * Dy * Dz;
       if Process_Count_Range (Dxyz) /= NumRanks then
-         raise Usage_Error with
-           "Domain count:" & Dxyz'Img &
-           " does nor equal proc count:" & NumRanks'Img;
+         Abort_Or_Raise
+           (Usage_Error'Identity,
+            "Domain count:" & Dxyz'Img & " does nor equal proc count:" & NumRanks'Img);
       end if;
       --x    Int_t remainder = dx*dy*dz % numRanks ;
       --x    if (myRank < remainder) {
@@ -1520,17 +1502,17 @@ package body LULESH.Init is
       --x          (myRank - remainder)*(dx*dy*dz/numRanks) ;
       --x    }
       declare
-         -- Always 0, since dxyz = numRanks:
+         --- Always 0, since dxyz = numRanks:
          Remainder : constant Rank_Count_Range := Rank_Count_Range (Dxyz) rem NumRanks;
-         -- Always 1, since dxyz = numRanks:
+         --- Always 1, since dxyz = numRanks:
          Quotient  : constant Rank_Count_Range := Rank_Count_Range (Dxyz) / NumRanks;
       begin
          -- Always false:
          if MyRank < Remainder then
             My_Domain := Domain_Index (MyRank * (1 + Quotient)) ;
          else
-            -- my_domain := 0 * (1 + 1) + (myRank - 0) * 1:
-            -- my_domain := myRank:
+            --- my_domain := 0 * (1 + 1) + (myRank - 0) * 1:
+            --- my_domain := myRank:
             My_Domain := Domain_Index (Remainder * (1 + Quotient) +
                                        (MyRank - Remainder) * Quotient);
          end if;
