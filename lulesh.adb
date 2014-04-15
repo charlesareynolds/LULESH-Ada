@@ -259,7 +259,7 @@ package body LULESH is
                  (Sendbuf  => Gnewdt'Address,
                   Recvbuf  => Newdt'Address,
                   Count    => 1,
-                  Datatype => (if Real_Type'Size = 16 then MPI.FLOAT else MPI.DOUBLE),
+                  Datatype => (if Real_Type'Size = 16 then MPI.FLOATT else MPI.DOUBLE),
                   Op       => MPI.MIN,
                   Comm     => MPI.COMM_WORLD);
             else
@@ -332,15 +332,15 @@ package body LULESH is
    procedure CollectDomainNodesToElemNodes
      (Domain              : in  Domain_Record;
       Element             : in  Element_Index;
-      Element_Node_Coords : out NodesPerElement_Coordinate_Array)
+      Element_Node_Coords : out Nodes_Per_Element_Coordinate_Array)
      with Inline
    is
-      Element_Node_Indexes : constant NodesPerElement_Node_Index_Array :=
-        Domain.Elements (Element).Node_Indexes;
+      Element_Corner_Nodes : constant Nodes_Per_Element_Node_Index_Array :=
+        Domain.Elements (Element).Corner_Nodes;
    begin
-      for Element_Node in Element_Node_Indexes'Range loop
+      for Element_Node in Element_Corner_Nodes'Range loop
          Element_Node_Coords (Element_Node) :=
-           Domain.Nodes (Element_Node_Indexes (Element_Node)).Coordinate;
+           Domain.Nodes (Element_Corner_Nodes (Element_Node)).Coordinate;
       end loop;
    end CollectDomainNodesToElemNodes;
 
@@ -385,7 +385,7 @@ package body LULESH is
    --x                                        Real_t b[][8],
    --x                                        Real_t* const volume )
    procedure CalcElemShapeFunctionDerivatives
-     (enodes         : in  NodesPerElement_Coordinate_Array;
+     (enodes         : in  Nodes_Per_Element_Coordinate_Array;
       b              : out Derivative_Cartesian_Real_Array;
       element_volume : out Volume)
      with Inline
@@ -570,7 +570,7 @@ package body LULESH is
       node1_area  : in out Area_Vector;
       node2_area  : in out Area_Vector;
       node3_area  : in out Area_Vector;
-      node_coords : in NodesPerFace_Coordinate_Array)
+      node_coords : in Nodes_Per_Face_Coordinate_Array)
      with Inline
    is
       --x    Real_t bisectX0 = Real_t(0.5) * (x3 + x2 - x1 - x0);
@@ -650,8 +650,8 @@ package body LULESH is
    --x {
 
    procedure CalcElemNodeNormals
-     (pf                  : in out NodesPerElement_Area_Vector_Array;
-      element_node_coords : in     NodesPerElement_Coordinate_Array)
+     (pf                  : in out Nodes_Per_Element_Area_Vector_Array;
+      element_node_coords : in     Nodes_Per_Element_Coordinate_Array)
      with Inline is
    begin
       --x    for (Index_t i = 0 ; i < 8 ; ++i) {
@@ -703,17 +703,17 @@ package body LULESH is
       --x                   &pfx[5], &pfy[5], &pfz[5],
       --x                   x[4], y[4], z[4], x[7], y[7], z[7],
       --x                   x[6], y[6], z[6], x[5], y[5], z[5]);
-      for face in Face_Range loop
+      for face in Face_Numbers loop
          SumElemFaceNormal
-           (node0_area => pf (nodes_of(face)(0)),
-            node1_area => pf (nodes_of(face)(1)),
-            node2_area => pf (nodes_of(face)(2)),
-            node3_area => pf (nodes_of(face)(3)),
+           (node0_area => pf (Corner_Nodes_Of_Face(face)(0)),
+            node1_area => pf (Corner_Nodes_Of_Face(face)(1)),
+            node2_area => pf (Corner_Nodes_Of_Face(face)(2)),
+            node3_area => pf (Corner_Nodes_Of_Face(face)(3)),
             node_coords  =>
-              (element_node_coords (nodes_of(face)(0)),
-               element_node_coords (nodes_of(face)(1)),
-               element_node_coords (nodes_of(face)(2)),
-               element_node_coords (nodes_of(face)(3))));
+              (element_node_coords (Corner_Nodes_Of_Face(face)(0)),
+               element_node_coords (Corner_Nodes_Of_Face(face)(1)),
+               element_node_coords (Corner_Nodes_Of_Face(face)(2)),
+               element_node_coords (Corner_Nodes_Of_Face(face)(3))));
       end loop;
    --x }
    end CalcElemNodeNormals;
@@ -728,9 +728,9 @@ package body LULESH is
    --x                                   Real_t fx[], Real_t fy[], Real_t fz[] )
    --x {
    procedure SumElemStressesToNodeForces
-     (node_areas     : in     NodesPerElement_Area_Vector_Array;
+     (node_areas     : in     Nodes_Per_Element_Area_Vector_Array;
       element_stress : in     Pressure_Vector;
-      node_forces    : in out NodesPerElement_Force_Vector_Array)
+      node_forces    : in out Nodes_Per_Element_Force_Vector_Array)
      with Inline
    is begin
    --x    for(Index_t i = 0; i < 8; i++) {
@@ -738,7 +738,7 @@ package body LULESH is
    --x       fy[i] = -( stress_yy * B[1][i] );
    --x       fz[i] = -( stress_zz * B[2][i] );
    --x    }
-      for node in NodesPerElement_Range loop
+      for node in Element_Node_Numbers loop
          for axis in Cartesian_Axes loop
             node_forces(node)(axis) :=
               -(element_stress(axis) * node_areas(node)(axis));
@@ -775,8 +775,8 @@ package body LULESH is
       --x    Real_t fx_local[8] ;
       --x    Real_t fy_local[8] ;
       --x    Real_t fz_local[8] ;
-      f_elem             : Element_NodesPerElement_Force_Vector_Array_Array_Access;
-      local_nodes_forces : NodesPerElement_Force_Vector_Array;
+      Elements_Forces    : Element_Force_Vector_Array_Access;
+      Local_Nodes_Forces : Nodes_Per_Element_Force_Vector_Array;
       use type OMP.Thread_Count;
 
       --x   if (numthreads > 1) {
@@ -809,17 +809,18 @@ package body LULESH is
          if Numthreads > 1 then
             for Node in Domain.Nodes'Range loop
                declare
-                  CornerList : Element_Element_Index_Array_Access :=
-                    Domain.NodeElemCornerList (Node);
-                  F_Tmp : Force_Vector := (others => 0.0);
+                  Elements_Node_Is_Corner_Of : constant Element_Element_Index_Array :=
+                    Domain.Nodes (Node).Elements_Is_Corner_Of.all;
+                  Node_Force : Force_Vector := (others => 0.0);
                begin
-                  for I in CornerList'Range loop
-                     F_Tmp := F_Tmp + F_Elem (CornerList (I));
+                  for Index in Elements_Node_Is_Corner_Of'Range loop
+                     Node_Force := Node_Force +
+                       Elements_Forces (Elements_Node_Is_Corner_Of (Index));
                   end loop;
-                  Domain.Nodes (Node).Force := F_Tmp;
+                  Domain.Nodes (Node).Force := Node_Force;
                end;
             end loop;
-            Release (F_Elem);
+            Release (Elements_Forces);
          end if;
       end Copy_Data_Out_If_Threaded;
 
@@ -830,7 +831,7 @@ package body LULESH is
       --x      fz_elem = Allocate<Real_t>(numElem8) ;
       --x   }
       if numthreads > 1 then
-         f_elem := new Element_NodesPerElement_Force_Vector_Array_Array
+         Elements_Forces := new Element_Force_Vector_Array
            (0..domain.numElem-1);
       end if;
 
@@ -846,10 +847,10 @@ package body LULESH is
             --x     Real_t x_local[8] ;
             --x     Real_t y_local[8] ;
             --x     Real_t z_local[8] ;
-            element_node_coords  : NodesPerElement_Coordinate_Array;
-            element_node_indexes : constant NodesPerElement_Node_Index_Array
-              := domain.elements(element).node_indexes;
-            B                    : NodesPerElement_Area_Vector_Array;
+            element_node_coords  : Nodes_Per_Element_Coordinate_Array;
+            Element_Corner_Nodes : constant Nodes_Per_Element_Node_Index_Array
+              := domain.elements(element).Corner_Nodes;
+            B                    : Nodes_Per_Element_Area_Vector_Array;
             shape_function_areas : Derivative_Cartesian_Real_Array;
             temp_volume          : Volume;
          begin
@@ -864,11 +865,10 @@ package body LULESH is
             --x     CalcElemShapeFunctionDerivatives(x_local, y_local, z_local,
             --x                                          B, &determ[k]);
             CalcElemShapeFunctionDerivatives
-              (enodes         => element_node_coords,
-               B              => shape_function_areas,
-               element_volume => temp_volume);
-            determinants (element) := Determinant_Type(temp_volume);
---               element_volume => Volume (determinants (element)));
+              (Enodes         => Element_Node_Coords,
+               B              => Shape_Function_Areas,
+               Element_Volume => Temp_Volume);
+            Determinants (Element) := Determinant_Type (Temp_Volume);
 
             --- CalcElemShapeFunctionDerivatives above sets B.
             --- CalcElemNodeNormals below resets B before using it.
@@ -891,7 +891,7 @@ package body LULESH is
                SumElemStressesToNodeForces
                  (node_areas     => B,
                   element_stress => stress_integrated (element),
-                  node_forces    => f_elem (element));
+                  node_forces    => Local_Nodes_Forces);
                --x     }
                --x     else {
             else
@@ -900,7 +900,7 @@ package body LULESH is
                SumElemStressesToNodeForces
                  (node_areas     => B,
                   element_stress => stress_integrated (element),
-                  node_forces    => local_nodes_forces);
+                  Node_Forces    => Local_Nodes_Forces);
                ---        // copy nodal force contributions to global force arrray.
                --x        for( Index_t lnode=0 ; lnode<8 ; ++lnode ) {
                --x           Index_t gnode = elemToNode[lnode];
@@ -909,13 +909,12 @@ package body LULESH is
                --x           domain.fz(gnode) += fz_local[lnode];
                --x        }
                --x     }
-               for element_node in NodesPerElement_Range loop
+               for Element_Node in Element_Corner_Nodes'Range loop
                   declare
-                     node : constant Node_Index :=
-                       element_node_indexes (element_node);
+                     Node_Force : Force_Vector renames
+                       Domain.Nodes (Element_Corner_Nodes (Element_Node)).Force;
                   begin
-                     domain.nodes(node).force := domain.nodes(node).force +
-                       local_nodes_forces(element_node);
+                     Node_Force := Node_Force + Local_Nodes_Forces (Element_Node);
                   end;
                end loop;
             end if;
@@ -948,7 +947,7 @@ package body LULESH is
    --x              Real_t* dvdx, Real_t* dvdy, Real_t* dvdz)
    --x {
    function VoluDer
-     (Nodes        : in NodesPerElement_Coordinate_Array;
+     (Nodes        : in Nodes_Per_Element_Coordinate_Array;
       Node_Indexes : in Input_Index_Array)
       return Coordinate_Vector
      with Inline
@@ -1015,8 +1014,8 @@ package body LULESH is
    --x                               const Real_t z[8])
    --x {
    procedure CalcElemVolumeDerivative
-     (Dvd : out NodesPerElement_Coordinate_Array;
-        Nodes : in  NodesPerElement_Coordinate_Array)
+     (Dvd : out Nodes_Per_Element_Coordinate_Array;
+        Nodes : in  Nodes_Per_Element_Coordinate_Array)
        with Inline is
    begin
       --x    VoluDer(x[1], x[2], x[3], x[4], x[5], x[7],
@@ -1423,8 +1422,8 @@ package body LULESH is
          declare
             --x       Real_t  x1[8],  y1[8],  z1[8] ;
             --x       Real_t pfx[8], pfy[8], pfz[8] ;
-            Node_Coords : NodesPerElement_Coordinate_Array;
-            Derivatives : NodesPerElement_Coordinate_Array;
+            Node_Coords : Nodes_Per_Element_Coordinate_Array;
+            Derivatives : Nodes_Per_Element_Coordinate_Array;
             --x       Index_t* elemToNode = domain.nodelist(i);
             begin
             --x       CollectDomainNodesToElemNodes(domain, elemToNode, x1, y1, z1);
@@ -1498,7 +1497,7 @@ package body LULESH is
             --       Real_t *sigyy  = Allocate<Real_t>(numElem) ;
             --       Real_t *sigzz  = Allocate<Real_t>(numElem) ;
             --       Real_t *determ = Allocate<Real_t>(numElem) ;
-            hgcoef            : Dimensionless := domain.parameters.hgcoef;
+            hgcoef            : constant Dimensionless := domain.parameters.hgcoef;
             stress_integrated : Element_Pressure_Vector_Array_Access  :=
               new Element_Pressure_Vector_Array (0 .. numElem - 1);
             determinants      : Element_Determinant_Array_Access :=
@@ -2612,10 +2611,20 @@ package body LULESH is
                elem.q_new := 0.0;
             else
                declare
+                  --- Without the Pressure type cnversion, dimension checking
+                  --- doesn't see PHalfstep components as having these dimensions:
+                  ---   (   Meter    => -1,
+                  ---       Kilogram =>  1,
+                  ---       Second   => -2,
+                  ---       others   =>  0);
+                  -- !! Problem: Volume_Relative is dimensionless, but Pressure
+                  -- assumes dimensioned Volume type!  use relatiive pressure?
+--                    pragma Warnings (Off, "redundant conversion, expression is of type ""Pressure""");
                   ssc : Dimensionless :=
-                    (elem.pbvc * elem.e_new
-                     + Vhalf ** 2 * Elem.Bvc * PHalfStep (Element))
-                      / Info.Rho0;
+                    (Elem.Pbvc * Elem.E_New
+                     + Vhalf ** 2 * Elem.Bvc * Relative_Pressure (PHalfStep (Element)))
+                    / Info.Rho0;
+--                         pragma Warnings (On, "redundant conversion, expression is of type ""Pressure""");
                begin
                   if ssc <= 0.1111111e-36 then
                      ssc := 0.3333333e-18;

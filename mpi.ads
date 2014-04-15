@@ -23,7 +23,7 @@ package MPI is
    type errorcode_Type is new Integer;
    type Datatype_Type is
      (DOUBLE,
-     FLOAT);
+     FLOATT);
 
    type Reduce_Op_Type is
      (MIN, MAX);

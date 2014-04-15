@@ -15,7 +15,7 @@ package LULESH.Util is
       its         : Natural;
       side_length : Element_Index;
       numReg      : Region_Index;
-      numFiles    : Int_t;
+      numFiles    : Integer;
       showProg    : Boolean;
       quiet       : Boolean;
       viz         : Boolean;

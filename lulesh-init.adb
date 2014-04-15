@@ -66,8 +66,8 @@ package body LULESH.Init is
 
    function Choose_Rem
      (Modulo : in Integer)
-      return Int_T is
-     (Int_T (Random_Selection.Choose_Rem (Modulo)));
+      return Integer is
+     (Random_Selection.Choose_Rem (Modulo));
 
    function Choose_Rem
      (Modulo : in Cost_Type)
@@ -180,7 +180,7 @@ package body LULESH.Init is
    --- EXPORTED:
    -------------
    function Create
-     (NumRanks    : in Rank_Count_Range;
+     (NumRanks    : in Process_Count;
       ColLoc      : in Domain_Index;
       RowLoc      : in Domain_Index;
       PlaneLoc    : in Domain_Index;
@@ -263,23 +263,16 @@ package body LULESH.Init is
       This.Variables.PlaneLoc := PlaneLoc;
       --x    m_numElem = edgeElems*edgeElems*edgeElems ;
       --x    m_numNode = edgeNodes*edgeNodes*edgeNodes ;
-      This.NumElem := EdgeElems ** 3;
-      This.NumNode := EdgeNodes ** 3;
-
       --x    m_regNumList = new Index_t[numElem()] ;  // material indexset
-
-      --x    // Elem-centered
+      ---    // Elem-centered
       --x    AllocateElemPersistent(numElem()) ;
-      This.Elements := new Element_Array (0 .. This.NumElem - 1);
-
-      --x    // Node-centered
+      This.Elements := new Element_Array (0 .. EdgeElems ** 3 - 1);
+      ---    // Node-centered
       --x    AllocateNodePersistent(numNode()) ;
-      This.Nodes := new Node_Array (0 .. This.NumNode - 1);
-
+      This.Nodes := new Node_Array (0 .. EdgeNodes ** 3 - 1);
       --x    SetupCommBuffers(edgeNodes);
       SetupCommBuffers (This, EdgeNodes);
-
-      --x    // Basic Field Initialization
+      ---    // Basic Field Initialization
       --x    for (Index_t i=0; i<numElem(); ++i) {
       --x       e(i) =  Real_t(0.0) ;
       --x       p(i) =  Real_t(0.0) ;
@@ -290,7 +283,7 @@ package body LULESH.Init is
       --x    for (Index_t i=0; i<numElem(); ++i) {
       --x       v(i) = Real_t(1.0) ;
       --x    }
-      for Index in 0 .. This.NumElem - 1 loop
+      for Index in This.Elements'Range loop
          This.Elements (Index).Energy               := 0.0 * J;
          This.Elements (Index).Pressure             := 0.0 * Pa;
          This.Elements (Index).Artificial_Viscosity := 0.0;
@@ -310,7 +303,7 @@ package body LULESH.Init is
       --x    for (Index_t i=0; i<numNode(); ++i) {
       --x       nodalMass(i) = Real_t(0.0) ;
       --x    }
-      for Index in 0 .. This.NumNode - 1 loop
+      for Index in This.Nodes'Range loop
          This.Nodes (Index).Velocity     := (others => 0.0 * Mps);
          This.Nodes (Index).Acceleration := (others => 0.0 * Mps2);
          This.Nodes (Index).Mass         := 0.0 * Kg;
@@ -397,13 +390,13 @@ package body LULESH.Init is
       --x          nodalMass(idx) += volume / Real_t(8.0) ;
       --x       }
       --x    }
-      for Element in 0 .. This.NumElem - 1 loop
+      for Element in This.Elements'Range loop
          declare
-            Local_Coords : NodesPerElement_Coordinate_Array;
-            ElemToNode   : constant NodesPerElement_Node_Index_Array :=
-              This.Elements (Element).Node_Indexes;
+            Local_Coords : Nodes_Per_Element_Coordinate_Array;
+            ElemToNode   : constant Nodes_Per_Element_Node_Index_Array :=
+              This.Elements (Element).Corner_Nodes;
          begin
-            for Node in NodesPerElement_Range loop
+            for Node in Element_Node_Numbers loop
                Local_Coords (Node) :=
                  This.Nodes (ElemToNode (Node)).Coordinate;
             end loop;
@@ -415,7 +408,7 @@ package body LULESH.Init is
             begin
                This.Elements (Element).Volume_Reference := Element_Volume;
                This.Elements (Element).Mass := Mass_Type (Element_Volume);
-               for Node in NodesPerElement_Range loop
+               for Node in Element_Node_Numbers loop
                   declare
                      Node_Mass : Mass renames
                        This.Nodes (ElemToNode (Node)).Mass;
@@ -452,9 +445,9 @@ package body LULESH.Init is
          end if;
          ---    //set initial deltatime base on analytic CFL calculation
          --x    deltatime() = (Real_t(.5)*cbrt(volo(0)))/sqrt(Real_t(2.0)*einit);
-         This.Variables.Deltatime := Time (
-                                           ((0.5 *  Cbrt (Dimensionless (This.Elements (0).Volume_Reference))) /
-                                             Sqrt (2.0 * Dimensionless (Einit))));
+         This.Variables.Deltatime := Time_Span
+           ( ((0.5 *  Cbrt (Dimensionless (This.Elements (0).Volume_Reference))) /
+                 Sqrt (2.0 * Dimensionless (Einit))));
          --             ((0.5 * Cbrt (Real10 (This.Elements (0).Volume_Reference))) /
          --                Sqrt (2.0 * Real10 (Einit))) * S;
       end;
@@ -474,7 +467,7 @@ package body LULESH.Init is
       EdgeElems   : in Element_Index)
    is
       subtype Edge_Elements_Range is Element_Index range 0 .. EdgeElems - 1;
-      subtype Edge_Nodes_Range is Node_Index range 0 .. EdgeNodes - 1;
+      subtype Edge_Node_Numbers is Node_Index range 0 .. EdgeNodes - 1;
       --x   Index_t meshEdgeElems = m_tp*nx ;
       ---   // initialize nodal coordinates
       --x   Index_t nidx = 0 ;
@@ -514,11 +507,11 @@ package body LULESH.Init is
       --x     tz = Real_t(1.125)*Real_t(m_planeLoc*nx+plane+1)/Real_t(meshEdgeElems) ;
       --x   }
       Node := 0;
-      for This_Plane in Edge_Nodes_Range loop
+      for This_Plane in Edge_Node_Numbers loop
          T (Z) := Calc_T_Part (This.Variables.PlaneLoc, This_Plane);
-         for This_Row in Edge_Nodes_Range loop
+         for This_Row in Edge_Node_Numbers loop
             T (Y) := Calc_T_Part (This.Variables.RowLoc, This_Row);
-            for This_Col in Edge_Nodes_Range loop
+            for This_Col in Edge_Node_Numbers loop
                T (X) := Calc_T_Part (This.Variables.ColLoc, This_Col);
                This.Nodes (Node).Coordinate := T;
                Node := Node + 1;
@@ -553,7 +546,7 @@ package body LULESH.Init is
       for This_Plane in Edge_Elements_Range loop
          for This_Row in Edge_Elements_Range loop
             for This_Col in Edge_Elements_Range loop
-               This.Elements (Zidx).Node_Indexes :=
+               This.Elements (Zidx).Corner_Nodes :=
                  (0 => Node                                       ,
                   1 => Node                                   + 1 ,
                   2 => Node                       + EdgeNodes + 1 ,
@@ -584,17 +577,13 @@ package body LULESH.Init is
       --x #else
       --x    Index_t numthreads = 1;
       --x #endif
-      Numthreads         : constant OMP.Thread_Count :=
+      Numthreads     : constant OMP.Thread_Count :=
         (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Max_Threads else 1);
       --- Number of elements each node is in. Interior nodes are in 8 elements,
-      --- faces 4, edges 2, and corners 1:
-      NodeElemCounts     : Node_Element_Index_Array_Access;
-      NodeElemStart      : Node_Element_Index_Array_Access renames
-        This.Variables.NodeElemStart;
-      NodeElemCornerList : Element_Element_Index_Array_Access renames
-        This.Variables.NodeElemCornerList;
+      --- faces 4, edges 2, and corners 1.  One entry for each node:
+      NodeElemCounts : Node_Element_Index_Array_Access;
 
-      procedure Count_Elements_For_Each_Node is
+      procedure Count_And_Allocate_Elements_For_Each_Node is
       begin
          --x     for (Index_t i=0; i<numElem(); ++i) {
          --x       Index_t *nl = nodelist(i) ;
@@ -603,16 +592,20 @@ package body LULESH.Init is
          --x       }
          --x     }
          for Element in This.Elements'Range loop
-            for Enode in NodesPerElement_Range loop
+            for Element_Node in Element_Node_Numbers loop
                declare
-                  Count : Element_Index renames
-                    NodeElemCounts (This.Elements (Element).Node_Indexes (Enode));
+                  Count : Element_Count Renames
+                    NodeElemCounts (This.Elements (Element).Corner_Nodes (Element_Node));
                begin
                   Count := Count + 1;
                end;
             end loop;
          end loop;
-      end Count_Elements_For_Each_Node;
+         for Node in This.Nodes'Range loop
+            This.Nodes (Node).Elements_Is_Corner_Of :=
+              new Element_Element_Index_Array'(0 .. NodeElemCounts (Node) - 1);
+         end loop;
+      end Count_And_Allocate_Elements_For_Each_Node;
 
       procedure Calc_First_Element_For_Each_Node is
       begin
@@ -622,13 +615,16 @@ package body LULESH.Init is
          --x       m_nodeElemStart[i] =
          --x 	m_nodeElemStart[i-1] + nodeElemCount[i-1] ;
          --x     }
-         NodeElemStart := new Node_Element_Index_Array (0 .. This.NumNode);
-         NodeElemStart (0) := 0;
+         This.Nodes (0).Elements_Is_Corner_Of (0) := 0;
          for Node in 1 .. This.NumNode loop
-            NodeElemStart (Node) :=
-              NodeElemStart (Node - 1) + NodeElemCounts (Node - 1);
+            This.Nodes (Node).Elements_Is_Corner_Of (0) :=
+              This.Nodes (Node - 1).Elements_Is_Corner_Of (0) +
+              NodeElemCounts (Node - 1);
          end loop;
       end Calc_First_Element_For_Each_Node;
+
+
+      Left_Off_Here;
 
       procedure Calc_Nodes_Per_Element_Offset_For_Each_Corner is
       begin
@@ -650,16 +646,17 @@ package body LULESH.Init is
          --x 	++(nodeElemCount[m]) ;
          --x       }
          --x     }
-         for Element in 0 .. This.NumElem - 1 loop
-            for Enode in NodesPerElement_Range loop
+         for Element in This.Elements'Range loop
+            for Element_Node in Element_Node_Numbers loop
                declare
                   Node   : constant Node_Index :=
-                    This.Elements (Element).Node_Indexes (Enode);
+                    This.Elements (Element).Corner_Nodes (Element_Node);
                   Corner_Offset : constant Element_Index :=
                     NodeElemStart (Node) + NodeElemCounts (Node) ;
                   Nodes_Per_Element_Offset      : constant Element_Index :=
-                    Element * NODES_PER_ELEMENT + Element_Index (Enode) ;
+                    Element * NODES_PER_ELEMENT + Element_Index (Element_Node) ;
                begin
+                  This.Nodes (Node).Elements_Is_Corner_Of (0)
                   NodeElemCornerList (Corner_Offset) := Nodes_Per_Element_Offset;
                   ---!! Is it ok that this changes from one reference to ther next?
                   NodeElemCounts (Node) := NodeElemCounts (Node) + 1;
@@ -720,9 +717,8 @@ package body LULESH.Init is
       --x     m_nodeElemStart = NULL;
       --x     m_nodeElemCornerList = NULL;
       if Numthreads > 1 then
-         NodeElemCounts := new Node_Element_Index_Array'
-           (0 .. This.NumNode - 1 => 0);
-         Count_Elements_For_Each_Node;
+         NodeElemCounts := new Node_Element_Count_Array'(This.Nodes'Range => 0);
+         Count_And_Allocate_Elements_For_Each_Node;
          Calc_First_Element_For_Each_Node;
          Calc_Nodes_Per_Element_Offset_For_Each_Corner;
          Check_Each_Nodes_Per_Element_Offset;
@@ -785,7 +781,7 @@ package body LULESH.Init is
               Index_Type (1 * MAX_FIELDS_PER_MPI_COMM);
             ComBufSize : Index_Type := 0;
          begin
-            -- 6 planes:
+            --- 6 planes:
             for RCP in Row_Col_Plane loop
                for M in Min_Max loop
                   if TV.At_Limit (RCP, M) then
@@ -800,7 +796,7 @@ package body LULESH.Init is
             --x      (m_rowMax & m_colMin) + (m_rowMin & m_planeMax) + (m_colMin & m_planeMax) +
             --x      (m_rowMin & m_colMax) + (m_rowMax & m_planeMin) + (m_colMax & m_planeMin)) *
             --x     m_maxPlaneSize * MAX_FIELDS_PER_MPI_COMM ;
-            -- 12 edges:
+            --- 12 edges:
             for RCP in Row_Col_Plane loop
                for This_Min_Max in Min_Max loop
                   for Succ_Min_Max in Min_Max loop
@@ -823,7 +819,7 @@ package body LULESH.Init is
             --x 		 (m_rowMax & m_colMax & m_planeMax)) * CACHE_COHERENCE_PAD_REAL ;
             --x   this->commDataSend = new Real_t[comBufSize] ;
             --x   this->commDataRecv = new Real_t[comBufSize] ;
-            -- 8 corners:
+            --- 8 corners:
             for Row_Min_Max in Min_Max loop
                for Col_Min_Max in Min_Max loop
                   for Plane_Min_Max in Min_Max loop
@@ -855,13 +851,13 @@ package body LULESH.Init is
       --x   if (m_planeLoc == 0)
       --x     m_symmZ.resize(edgeNodes*edgeNodes);
       if TV.ColLoc = 0 then
-         TV.Symmetry_Plane_Nodes (X) := new Node_Index_Array (0 .. EdgeNodes ** 2);
+         TV.Symmetry_Plane_Nodes (X) := new Node_Node_Index_Array (0 .. EdgeNodes ** 2);
       end if;
       if TV.RowLoc = 0 then
-         TV.Symmetry_Plane_Nodes (Y) := new Node_Index_Array (0 .. EdgeNodes ** 2);
+         TV.Symmetry_Plane_Nodes (Y) := new Node_Node_Index_Array (0 .. EdgeNodes ** 2);
       end if;
       if TV.PlaneLoc = 0 then
-         TV.Symmetry_Plane_Nodes (Z) := new Node_Index_Array (0 .. EdgeNodes ** 2);
+         TV.Symmetry_Plane_Nodes (Z) := new Node_Node_Index_Array (0 .. EdgeNodes ** 2);
       end if;
       --x }
    end SetupCommBuffers;
@@ -892,10 +888,9 @@ package body LULESH.Init is
       Random_Selection.Initialize (MyRank);
 
       --x    this->numReg() = nr;
-      This.NumReg := Nreg;
       --x    m_regElemSize = new Index_t[numReg()];
       --x    m_regElemlist = new Index_t*[numReg()];
-      This.Regions := new Region_Array (0 .. This.NumReg - 1);
+      This.Regions := new Region_Array (0 .. Nreg - 1);
       --x    Index_t nextIndex = 0;
       ---    //if we only have one region just fill it
       ---    // Fill out the regNumList with material numbers, which are always
@@ -928,7 +923,7 @@ package body LULESH.Init is
             RegionNum       : Region_Index;
             RegionVar       : Cost_Type;
             LastReg         : Region_Index := Region_Index'Last;
-            BinSize         : Int_T;
+            BinSize         : Integer;
             Elements        : Element_Index;
             Runto           : Element_Index := 0;
             CostDenominator : Cost_Type := 0;
@@ -1152,7 +1147,7 @@ package body LULESH.Init is
       --x    }
       --x    lxip(numElem()-1) = numElem()-1 ;
       This.Elements (0).Connections (Xi, M) := 0;
-      for I in 0 .. This.NumElem - 1 loop
+      for I in This.Elements'Range loop
          This.Elements (I).Connections (Xi, M) := I - 1;
          This.Elements (I - 1).Connections (Xi, P) := I;
       end loop;
@@ -1203,7 +1198,7 @@ package body LULESH.Init is
      (This      : in out Domain_Record;
       EdgeElems : in Element_Index)
    is
-      GhostIdx : FacesPerNode_Element_Index_Array;
+      GhostIdx : Faces_Per_Element_Element_Index_Array;
       Pidx     : Element_Index;
       Size     : constant Cartesian_Size_Array := This.Parameters.Size;
    begin
@@ -1211,7 +1206,7 @@ package body LULESH.Init is
       --x   for (Index_t i=0; i<numElem(); ++i) {
       --x      elemBC(i) = Int_t(0) ;
       --x   }
-      for I in 0 .. This.NumElem - 1 loop
+      for I in This.Elements'Range loop
          This.Elements (I).ElemBC := (others => (others => (others => False)));
       end loop;
       --x   for (Index_t i=0; i<6; ++i) {
@@ -1410,7 +1405,7 @@ package body LULESH.Init is
    --x                     Int_t *col, Int_t *row, Int_t *plane, Int_t *side)
    --x {
    procedure InitMeshDecomp
-     (NumRanks         : in Rank_Count_Range;
+     (NumRanks         : in Process_Count;
       MyRank           : in Rank_Type;
       Domain_Column    : out Domain_Index;
       Domain_Row       : out Domain_Index;
@@ -1420,7 +1415,7 @@ package body LULESH.Init is
       --x    Int_t testProcs;
       --x    Int_t dx, dy, dz;
       --x    Int_t myDom;
-      Ranks_Root : Rank_Count_Range;
+      Ranks_Root : Process_Count;
       Dx         : Domain_Index;
       Dy         : Domain_Index;
       Dz         : Domain_Index;
@@ -1488,7 +1483,7 @@ package body LULESH.Init is
       Dy := Domain_Index (Ranks_Root);
       Dz := Domain_Index (Ranks_Root);
       Dxyz := Dx * Dy * Dz;
-      if Process_Count_Range (Dxyz) /= NumRanks then
+      if Process_Count (Dxyz) /= NumRanks then
          Abort_Or_Raise
            (Usage_Error'Identity,
             "Domain count:" & Dxyz'Img & " does nor equal proc count:" & NumRanks'Img);
@@ -1503,11 +1498,11 @@ package body LULESH.Init is
       --x    }
       declare
          --- Always 0, since dxyz = numRanks:
-         Remainder : constant Rank_Count_Range := Rank_Count_Range (Dxyz) rem NumRanks;
+         Remainder : constant Rank_Count := Rank_Count (Dxyz) rem NumRanks;
          --- Always 1, since dxyz = numRanks:
-         Quotient  : constant Rank_Count_Range := Rank_Count_Range (Dxyz) / NumRanks;
+         Quotient  : constant Rank_Count := Rank_Count (Dxyz) / NumRanks;
       begin
-         -- Always false:
+         --- Always false:
          if MyRank < Remainder then
             My_Domain := Domain_Index (MyRank * (1 + Quotient)) ;
          else

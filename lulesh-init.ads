@@ -5,7 +5,7 @@ package LULESH.Init is
    --x           Index_t rowLoc, Index_t planeLoc,
    --x           Index_t nx, Int_t tp, Int_t nr, Int_t balance, Int_t cost);
    function Create
-     (numRanks    : in Rank_Count_Range;
+     (numRanks    : in Rank_Count;
       colLoc      : in Domain_Index;
       rowLoc      : in Domain_Index;
       planeLoc    : in Domain_Index;
@@ -21,7 +21,7 @@ package LULESH.Init is
    --x void InitMeshDecomp(Int_t numRanks, Int_t myRank,
    --x                     Int_t *col, Int_t *row, Int_t *plane, Int_t *side);
    procedure InitMeshDecomp
-     (numRanks         : in Rank_Count_Range;
+     (numRanks         : in Rank_Count;
       myRank           : in Rank_Type;
       domain_column    : out Domain_Index;
       domain_row       : out Domain_Index;

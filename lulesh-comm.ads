@@ -11,7 +11,7 @@ package LULESH.Comm is
    --x               bool doRecv, bool planeOnly);
    procedure Recv
      (domain    : in out Domain_Record;
-      msgType    : in Int_t;
+      msgType    : in Integer;
       xferFields : in Index_Type;
       dx         : in Element_Index;
       dy         : in Element_Index;
@@ -25,7 +25,7 @@ package LULESH.Comm is
    --x               bool doSend, bool planeOnly);
    procedure Send
      (domain    : in out Domain_Record;
-      msgType    : in Int_t;
+      msgType    : in Integer;
       xferFields : in Index_Type;
       fieldData  : in Domain_Member_Array;
       dx         : in Element_Index;
@@ -37,7 +37,7 @@ package LULESH.Comm is
    --x void CommSBN(Domain& domain, Int_t xferFields, Domain_member *fieldData);
    procedure SBN
      (domain    : in out Domain_Record;
-      xferFields : in Int_t;
+      xferFields : in Integer;
       fieldData  : out Domain_member);
 
    --x void CommSyncPosVel(Domain& domain);

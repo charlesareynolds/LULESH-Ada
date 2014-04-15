@@ -72,7 +72,7 @@ begin
      (its         => 9999999,
       side_length => 30,
       numReg      => 11,
-      numFiles    => (Int_t (numRanks)+10) / 9,
+      numFiles    => (Integer (numRanks)+10) / 9,
       showProg    => False,
       quiet       => False,
       viz         => False,
@@ -102,7 +102,7 @@ begin
 --           ATI.Put_Line ("Num threads: " & omp_get_max_threads'Img);
 --        end if;
       ATI.Put_Line ("Total number of elements: " &
-                      Int_t'Image(Int_T(numRanks)*Int_t(opts.side_length)**3));
+                      Integer'Image(Integer(numRanks)*Integer(opts.side_length)**3));
       ATI.Put_Line ("");
       ATI.Put_Line ("To run other sizes, use -s <integer>.");
       ATI.Put_Line ("To run a fixed number of iterations, use -i <integer>.");
@@ -218,9 +218,9 @@ begin
       if opts.showProg and not opts.quiet and myRank = 0 then
          ATI.Put ("cycle = " & locDom.variables.cycle'Img
                   & ", current_time = ");
-         SIO.Put (locDom.variables.current_time);
+         MKSIO.Put (locDom.variables.current_time);
          ATI.Put (", dt = ");
-         SIO.Put (locDom.variables.deltatime); ATI.New_Line;
+         MKSIO.Put (locDom.variables.deltatime); ATI.New_Line;
       end if;
    end loop;
    ---    // Use reduced max elapsed time
