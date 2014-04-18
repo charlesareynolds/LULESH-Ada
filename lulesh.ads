@@ -7,6 +7,7 @@ with Ada.Real_Time;
 with Ada.Unchecked_Deallocation;
 with Interfaces;
 with MPI;
+with OMP;
 with System.Dim.Mks;
 with System.Dim.Mks_IO;
 
@@ -162,11 +163,9 @@ package LULESH is
    type Element_Index    is new Index_Type;
    type Node_Index       is new Index_Type;
    type Region_Index     is new Index_Type;
-   type Thread_Index     is new Index_Type;
    subtype Element_Count is Element_Index;
    subtype Node_Count    is Node_Index;
    subtype Region_Count  is Region_Index;
-   subtype Thread_Count  is Thread_Index;
 
    subtype Process_ID_Type is MPI.Rank_Type;
    subtype Rank_Type       is MPI.Rank_Type;
@@ -261,10 +260,13 @@ package LULESH is
       4 => (3, 7, 4, 0),
       5 => (4, 7, 6, 5));
    
+   -- Not declaring a new local derived type from the vector type in this package
+   -- because that introduces too many ambiguous overloaded entities:
    package Element_Count_Element_Index_Vectors is new 
      Ada.Containers.Bounded_Vectors 
        (Index_Type   => Element_Count,
         Element_Type => Element_Index);
+   package ECEIV renames Element_Count_Element_Index_Vectors;
 
    -----------------------------------------------------------------------------
    -- Boundary conditions:
@@ -299,8 +301,8 @@ package LULESH is
    type MP_Type is (M, P);
    type Boundary_Condition_Type is (Symm, Free, Common);
    type Element_Connection_Array is array (Natural_Axes, MP_Type) of Element_Index;
-   type Boundary_Condition_Array is
-     array (Natural_Axes, MP_Type, Boundary_Condition_Type) of Boolean with
+   type Boundary_Condition_Array is array
+      (Natural_Axes, MP_Type, Boundary_Condition_Type) of Boolean with
      Pack;
 
    -----------------------------------------------------------------------------
@@ -324,46 +326,49 @@ package LULESH is
    type Region_Bin_End_Array_Access is access Region_Bin_End_Array;
 
    type Thread_Element_Count_Array is
-     array (Thread_Index range <>) of Element_Count;
+     array (OMP.Thread_Index range <>) of Element_Count;
 
    -----------------------------------------------------------------------------
    -- Physical quantity types:
    -----------------------------------------------------------------------------
 
-   subtype Acceleration  is Mks_Type 
-   with Dimension => (Meter => 1, Second => -2, others => 0);
-   subtype Velocity      is MKS.Speed;
+   --- <Name>_Type types are to avoid collisions with components, parameters, and
+   --- variables named <Name>.
+   --- <Name>_Relative types' objects are expected to have an initial value of 1.0.
 
-   --- For components and variables named "Energy":
-   subtype Energy_Type   is MKS.Energy;
-   --- For parameters, components and variables named "Mass";
-   subtype Mass_Type     is MKS.Mass;
-   --- For parameters, components and variables named "Pressure";
-   subtype Pressure_Type is MKS.Pressure;
-   --- For parameters, components and variables named "Volume";
-   subtype Volume_Type   is MKS.Volume;
-
-   --- Multiply a dimensionless quantity by one of these to get a dimensioned quantity:
-   M2    : constant Area         := Area (1.0);
-   --     m3    : constant Volume       := Volume (1.0);
-   Mps   : constant Velocity     := Velocity (1.0);
-   Mps2  : constant Acceleration := Acceleration (1.0);
-   
-   
-   subtype Density          is Mks_Type;
-   --     subtype Density       is Mks_Type 
-   --     with Dimension => (Kilogram => 1, Meter => -3, others => 0);
-   Kgpm3 : constant Density      := Density (1.0);
    subtype Dimensionless    is Mks_Type;
+
+   subtype Acceleration         is Mks_Type 
+   with Dimension => (Meter => 1, Second => -2, others => 0);
    --- 1/Volume_Relative:
-   subtype Compression      is Dimensionless;
+   subtype Compression_Relative is  Mks_Type 
+   with Dimension => (Meter => -3, others => 0);
+   subtype Density              is Mks_Type 
+   with Dimension => (Meter => -3, Kilogram => 1, others => 0);
+   subtype Energy_Type          is Energy;
+   subtype Mass_Type            is MKS.Mass;
+   subtype Pressure_Relative    is MKS.Pressure;
+   subtype Pressure_Type        is MKS.Pressure;
+   subtype Velocity             is MKS.Speed;
+   -- Viscosity is like Pressure:
+   subtype Viscosity            is MKS_Type
+   with Dimension => (Meter => -1, Kilogram => 1, Second => -2, others => 0);
+   subtype Volume_Relative      is MKS.Volume;
+   subtype Volume_Type          is MKS.Volume;
+
    subtype Derivative_Type  is Dimensionless;
    subtype Determinant_Type is Dimensionless;
    subtype Gradient_Type    is Dimensionless;
    subtype Relative_Change  is Dimensionless;
-   subtype Viscosity        is Dimensionless;
-   subtype Volume_Relative  is Dimensionless;
 
+   --- Multiply a dimensionless quantity by one of these to get a dimensioned quantity:
+   M2    : constant Area         := Area (1.0);
+   --     Kgpm3 : constant Density      := Density (1.0);
+   Mps   : constant Velocity     := Velocity (1.0);
+   --     m3    : constant Volume       := Volume (1.0);
+   Mps2  : constant Acceleration := Acceleration (1.0);
+   
+   
    -----------------------------------------------------------------------------
 
    subtype Time_Span     is MKS.Time;
@@ -383,15 +388,19 @@ package LULESH is
    -----------------------------------------------------------------------------
 
    --- Provides matrix and vector math:
-   package Area_Arrays     is new Ada.Numerics.Generic_Real_Arrays (Area);
-   package Force_Arrays    is new Ada.Numerics.Generic_Real_Arrays (Force);
-   package Length_Arrays   is new Ada.Numerics.Generic_Real_Arrays (Length);
    package Pressure_Arrays is new Ada.Numerics.Generic_Real_Arrays (Pressure);
+   
+   --- Dimension aspects seem to be lost when using a dimensioned type as a
+   --- generic actual parameter. This means that an assignment like:
+   ---      Test1 : constant Area_Vector :=
+   ---          (X => Area(1.0)...
+   --- gets the semantic error:
+   ---         635:15 expected dimension [], found [L**2]   
 
    type Acceleration_Vector is array (Cartesian_Axes) of Acceleration;
-   type Area_Vector         is new Area_Arrays.Real_Vector (Cartesian_Axes);
-   type Coordinate_Vector   is new Length_Arrays.Real_Vector (Cartesian_Axes);
-   type Force_Vector        is new Force_Arrays.Real_Vector (Cartesian_Axes);
+   type Area_Vector         is array (Cartesian_Axes) of Area;
+   type Coordinate_Vector   is array (Cartesian_Axes) of Length;
+   type Force_Vector        is array (Cartesian_Axes) of Force;
    type Gradient_Vector     is array (Natural_Axes) of Gradient_Type;
    type Pressure_Vector     is new Pressure_Arrays.Real_Vector (Cartesian_Axes);
    type Strain_Vector       is array (Cartesian_Axes) of Length;
@@ -400,14 +409,14 @@ package LULESH is
    
    --- Node arrays:
    
-   type Node_Area_Vector_Array  is array 
+   type Node_Area_Vector_Array         is array 
      (Node_Index range <>) of Area_Vector;
-   type Node_Coordinate_Array   is array 
+   type Node_Coordinate_Array          is array 
      (Node_Index range <>) of Coordinate_Vector;
-   type Node_Force_Vector_Array is array 
+   type Node_Force_Vector_Array        is array 
      (Node_Index range <>) of Force_Vector;
    type Node_Force_Vector_Array_Access is access Node_Force_Vector_Array;
-   type Node_Volume_Array is array 
+   type Node_Volume_Array              is array 
      (Node_Index range <>) of Volume;
    --     type Node_Derivative_Vector_Array       is array (Node_Index range <>) of Derivative_Vector;
    --     type Gradient_Array              is array (Node_Index range <>) of Gradient_Vector;
@@ -428,7 +437,7 @@ package LULESH is
    --- Element arrays:
 
    type Element_Compression_Array is array
-     (Element_Index range <>) of Compression;
+     (Element_Index range <>) of Compression_Relative;
    type Element_Compression_Array_Access is access Element_Compression_Array;
    procedure Release is new Ada.Unchecked_Deallocation
      (Element_Compression_Array,
@@ -478,18 +487,22 @@ package LULESH is
 
    ---
 
-   type Cartesian_Natural_Real_Array is
-     array (Cartesian_Axes, Natural_Axes) of Real_Type;
+--     type Cartesian_Natural_Real_Array is
+--       array (Cartesian_Axes, Natural_Axes) of Real_Type;
    type Cartesian_Natural_Length_Array is
      array (Cartesian_Axes, Natural_Axes) of Length;
+   subtype Cofactor is MKS_Type
+   with Dimension => (Meter => 2, others => 0);
+   type Cartesian_Natural_Cofactor_Array is
+     array (Cartesian_Axes, Natural_Axes) of Cofactor;
    --- 0..2**Cartesian_Axes'Length-1?
    --- 0..NODES_PER_ELEMENT-1?
    type Derivatives_Range is new Index_Type range 0 .. 7;
-   type Derivative_Cartesian_Real_Array is
-     array (Derivatives_Range, Cartesian_Axes) of Real_Type;
+   type Derivative_Cartesian_Cofactor_Array is
+     array (Derivatives_Range, Cartesian_Axes) of Cofactor;
    --     type Derivative_Array is array (Derivatives_Range) of C_Coordinate_Vector;
    
-   type Thread_Time_Span_Array is array (Thread_Index range <>) of Time_Span;
+   type Thread_Time_Span_Array is array (OMP.Thread_Index range <>) of Time_Span;
 
    ---
 
@@ -569,8 +582,8 @@ package LULESH is
       --x    std::vector<Real_t> m_qq ;  /* quadratic term for q */
       Pressure                       : Pressure_Type;
       Artificial_Viscosity           : Viscosity;
-      Artificial_Viscosity_Linear    : Dimensionless;
-      Artificial_Viscosity_Quadratic : Dimensionless;
+      Artificial_Viscosity_Linear    : Viscosity;
+      Artificial_Viscosity_Quadratic : Viscosity;
       --        stress_integrated          : Force_Vector;
       --x    std::vector<Real_t> m_v ;     /* relative volume */
       --x    std::vector<Real_t> m_volo ;  /* reference volume */
@@ -582,7 +595,7 @@ package LULESH is
       New_Volume       : Volume_Relative;
       New_Volume_Delta : Volume_Relative;
       --!! delta relative volume over (not reference) volume?  delv/volo?:
-      Volume_Derivative_Over_Volume : Compression;
+      Volume_Derivative_Over_Volume : Compression_Relative;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
       Characteristic_Length         : Length;
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
@@ -714,14 +727,14 @@ package LULESH is
       Qstop              : Viscosity;
       Monoq_Max_Slope    : Dimensionless;
       Monoq_Limiter_Mult : Dimensionless;
-      Qlc_Monoq          : Dimensionless;
-      Qqc_Monoq          : Dimensionless;
-      Qqc                : Dimensionless;
+      Qlc_Monoq          : Viscosity;
+      Qqc_Monoq          : Viscosity;
+      Qqc                : Viscosity;
       Eosvmax            : Volume_Relative;
       Eosvmin            : Volume_Relative;
       Pressure_Floor     : Pressure;
       Energy_Floor       : Energy;
-      Dvovmax            : Compression;
+      Dvovmax            : Compression_Relative;
       Reference_Density  : Density;
       --x    Int_t    m_cost; //imbalance cost
       Imbalance_Cost     : Cost_Type;

@@ -219,25 +219,25 @@ package body LULESH.Init is
       --x    m_refdens(Real_t(1.0))
       --x {
       This.Parameters :=
-        (Energy_Tolerance           => 1.0e-7 * J,
-         Pressure_Tolerance         => 1.0e-7 * Pa,
-         Artificial_Viscosity_Tolerance => 1.0e-7,
-         Volume_Relative_Tolerance  => 1.0e-10,
-         Velocity_Tolerance         => 1.0e-7 * Mps,
+        (Energy_Tolerance           => Energy (1.0e-7),
+         Pressure_Tolerance         => Pressure (1.0e-7),
+         Artificial_Viscosity_Tolerance => Viscosity (1.0e-7),
+         Volume_Relative_Tolerance  => Volume_Relative (1.0e-10),
+         Velocity_Tolerance         => Velocity (1.0e-7),
          Hgcoef                     => 3.0,
          Four_Thirds                => 4.0 / 3.0,
-         Qstop                      => 1.0e+12,
+         Qstop                      => Viscosity (1.0e+12),
          Monoq_Max_Slope            => 1.0,
          Monoq_Limiter_Mult         => 2.0,
-         Qlc_Monoq                  => 0.5,
-         Qqc_Monoq                  => 2.0 / 3.0,
-         Qqc                        => 2.0,
-         Eosvmax                    => 1.0e+9,
-         Eosvmin                    => 1.0e-9,
-         Pressure_Floor             => 0.0 * Pa,
-         Energy_Floor               => -1.0e+15 * J,
-         Dvovmax                    => Compression (0.1),
-         Reference_Density          => 1.0 * Kgpm3,
+         Qlc_Monoq                  => Viscosity (0.5),
+         Qqc_Monoq                  => Viscosity (2.0 / 3.0),
+         Qqc                        => Viscosity (2.0),
+         Eosvmax                    => Volume_Relative (1.0e+9),
+         Eosvmin                    => Volume_Relative (1.0e-9),
+         Pressure_Floor             => Pressure (0.0),
+         Energy_Floor               => Energy (-1.0e+15),
+         Dvovmax                    => Compression_Relative (0.1),
+         Reference_Density          => Density (1.0),
          --x    this->cost() = cost;
          Imbalance_Cost             => Cost,
          --x    m_sizeX = edgeElems ;
@@ -284,11 +284,11 @@ package body LULESH.Init is
       --x       v(i) = Real_t(1.0) ;
       --x    }
       for Index in This.Elements'Range loop
-         This.Elements (Index).Energy               := 0.0 * J;
-         This.Elements (Index).Pressure             := 0.0 * Pa;
-         This.Elements (Index).Artificial_Viscosity := 0.0;
-         This.Elements (Index).Sound_Speed          := 0.0 * Mps;
-         This.Elements (Index).Volume               := 1.0;
+         This.Elements (Index).Energy               := Energy_Type (0.0);
+         This.Elements (Index).Pressure             := Pressure_Type (0.0);
+         This.Elements (Index).Artificial_Viscosity := Viscosity (0.0);
+         This.Elements (Index).Sound_Speed          := Velocity (0.0);
+         This.Elements (Index).Volume               := Volume_Relative (1.0);
       end loop;
       --x    for (Index_t i=0; i<numNode(); ++i) {
       --x       xd(i) = Real_t(0.0) ;
@@ -321,9 +321,6 @@ package body LULESH.Init is
       --x #endif
       if COMPILER_SUPPORTS_OPENMP then
          SetupThreadSupportStructures (This);
-      else
-         This.Variables.NodeElemStart := null;
-         This.Variables.NodeElemCornerList := null;
       end if;
 
       ---    // Setup region index sets. For now, these are constant sized
@@ -577,160 +574,71 @@ package body LULESH.Init is
       --x #else
       --x    Index_t numthreads = 1;
       --x #endif
-      Numthreads     : constant OMP.Thread_Count :=
-        (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Max_Threads else 1);
-      --- Number of elements each node is in. Interior nodes are in 8 elements,
-      --- faces 4, edges 2, and corners 1.  One entry for each node:
-      NodeElemCounts : Node_Element_Index_Array_Access;
-
-      procedure Count_And_Allocate_Elements_For_Each_Node is
-      begin
-         --x     for (Index_t i=0; i<numElem(); ++i) {
-         --x       Index_t *nl = nodelist(i) ;
-         --x       for (Index_t j=0; j < 8; ++j) {
-         --x 	++(nodeElemCount[nl[j]] );
-         --x       }
-         --x     }
-         for Element in This.Elements'Range loop
-            for Element_Node in Element_Node_Numbers loop
-               declare
-                  Count : Element_Count Renames
-                    NodeElemCounts (This.Elements (Element).Corner_Nodes (Element_Node));
-               begin
-                  Count := Count + 1;
-               end;
-            end loop;
-         end loop;
-         for Node in This.Nodes'Range loop
-            This.Nodes (Node).Elements_Is_Corner_Of :=
-              new Element_Element_Index_Array'(0 .. NodeElemCounts (Node) - 1);
-         end loop;
-      end Count_And_Allocate_Elements_For_Each_Node;
-
-      procedure Calc_First_Element_For_Each_Node is
-      begin
-         --x     m_nodeElemStart = new Index_t[numNode()+1] ;
-         --x     m_nodeElemStart[0] = 0;
-         --x     for (Index_t i=1; i <= numNode(); ++i) {
-         --x       m_nodeElemStart[i] =
-         --x 	m_nodeElemStart[i-1] + nodeElemCount[i-1] ;
-         --x     }
-         This.Nodes (0).Elements_Is_Corner_Of (0) := 0;
-         for Node in 1 .. This.NumNode loop
-            This.Nodes (Node).Elements_Is_Corner_Of (0) :=
-              This.Nodes (Node - 1).Elements_Is_Corner_Of (0) +
-              NodeElemCounts (Node - 1);
-         end loop;
-      end Calc_First_Element_For_Each_Node;
-
-
-      Left_Off_Here;
-
-      procedure Calc_Nodes_Per_Element_Offset_For_Each_Corner is
-      begin
-         --x     m_nodeElemCornerList = new Index_t[m_nodeElemStart[numNode()]];
-         NodeElemCornerList := new Element_Element_Index_Array
-           (0 .. NodeElemStart (This.NumNode)-1);
-         --x     for (Index_t i=0; i < numNode(); ++i) {
-         --x       nodeElemCount[i] = 0;
-         --x     }
-         ---!! Again?
-         NodeElemCounts.all := (others => 0);
-         --x     for (Index_t i=0; i < numElem(); ++i) {
-         --x       Index_t *nl = nodelist(i) ;
-         --x       for (Index_t j=0; j < 8; ++j) {
-         --x 	Index_t m = nl[j];
-         --x 	Index_t k = i*8 + j ;
-         --x 	Index_t offset = m_nodeElemStart[m] + nodeElemCount[m] ;
-         --x 	m_nodeElemCornerList[offset] = k;
-         --x 	++(nodeElemCount[m]) ;
-         --x       }
-         --x     }
-         for Element in This.Elements'Range loop
-            for Element_Node in Element_Node_Numbers loop
-               declare
-                  Node   : constant Node_Index :=
-                    This.Elements (Element).Corner_Nodes (Element_Node);
-                  Corner_Offset : constant Element_Index :=
-                    NodeElemStart (Node) + NodeElemCounts (Node) ;
-                  Nodes_Per_Element_Offset      : constant Element_Index :=
-                    Element * NODES_PER_ELEMENT + Element_Index (Element_Node) ;
-               begin
-                  This.Nodes (Node).Elements_Is_Corner_Of (0)
-                  NodeElemCornerList (Corner_Offset) := Nodes_Per_Element_Offset;
-                  ---!! Is it ok that this changes from one reference to ther next?
-                  NodeElemCounts (Node) := NodeElemCounts (Node) + 1;
-               end;
-            end loop;
-         end loop;
-      end Calc_Nodes_Per_Element_Offset_For_Each_Corner;
-
-      procedure Check_Each_Nodes_Per_Element_Offset is
-      begin
-         --x     Index_t clSize = m_nodeElemStart[numNode()] ;
-         --x     for (Index_t i=0; i < clSize; ++i) {
-         --x       Index_t clv = m_nodeElemCornerList[i] ;
-         --x       if ((clv < 0) || (clv > numElem()*8)) {
-         --x 	fprintf(stderr,
-         --x 		"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!\n");
-         --x #if USE_MPI
-         --x 	MPI_Abort(MPI_COMM_WORLD, -1);
-         --x #else
-         --x 	exit(-1);
-         --x #endif
-         --x       }
-         --x     }
-         declare
-            ClSize     : constant Element_Index :=
-              NodeElemStart (This.NumNode);
-            Max_ClSize : constant Element_Index :=
-              This.NumElem * NODES_PER_ELEMENT;
-         begin
-            for Element in 0 .. ClSize - 1 loop
-               declare
-                  Clv : constant Element_Index :=
-                    NodeElemCornerList (Element);
-               begin
-                  if Clv > Max_ClSize then
-                     Abort_Or_Raise
-                       (Coding_Error'Identity,
-                        "AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!" &
-                          "  i:" & Element'Img & " clv:" & Clv'Img);
-                  end if;
-               end;
-            end loop;
-         end;
-      end Check_Each_Nodes_Per_Element_Offset;
-
-      use type OMP.Thread_Count;
-   begin
       --x   if (numthreads > 1) {
-      ---     // set up node-centered indexing of elements
+      --x     // set up node-centered indexing of elements
       --x     Index_t *nodeElemCount = new Index_t[numNode()] ;
       --x     for (Index_t i=0; i<numNode(); ++i) {
       --x       nodeElemCount[i] = 0 ;
       --x     }
+      --x     for (Index_t i=0; i<numElem(); ++i) {
+      --x       Index_t *nl = nodelist(i) ;
+      --x       for (Index_t j=0; j < 8; ++j) {
+      --x 	++(nodeElemCount[nl[j]] );
+      --x       }
+      --x     }
+      --x     m_nodeElemStart = new Index_t[numNode()+1] ;
+      --x     m_nodeElemStart[0] = 0;
+      --x     for (Index_t i=1; i <= numNode(); ++i) {
+      --x       m_nodeElemStart[i] =
+      --x 	m_nodeElemStart[i-1] + nodeElemCount[i-1] ;
+      --x     }
+      --x     m_nodeElemCornerList = new Index_t[m_nodeElemStart[numNode()]];
+      --x     for (Index_t i=0; i < numNode(); ++i) {
+      --x       nodeElemCount[i] = 0;
+      --x     }
+      --x     for (Index_t i=0; i < numElem(); ++i) {
+      --x       Index_t *nl = nodelist(i) ;
+      --x       for (Index_t j=0; j < 8; ++j) {
+      --x 	Index_t m = nl[j];
+      --x 	Index_t k = i*8 + j ;
+      --x 	Index_t offset = m_nodeElemStart[m] + nodeElemCount[m] ;
+      --x 	m_nodeElemCornerList[offset] = k;
+      --x 	++(nodeElemCount[m]) ;
+      --x       }
+      --x     }
+      --x     Index_t clSize = m_nodeElemStart[numNode()] ;
+      --x     for (Index_t i=0; i < clSize; ++i) {
+      --x       Index_t clv = m_nodeElemCornerList[i] ;
+      --x       if ((clv < 0) || (clv > numElem()*8)) {
+      --x 	fprintf(stderr,
+      --x 		"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!\n");
+      --x #if USE_MPI
+      --x 	MPI_Abort(MPI_COMM_WORLD, -1);
+      --x #else
+      --x 	exit(-1);
+      --x #endif
+      --x       }
+      --x     }
       --x     delete [] nodeElemCount ;
       --x   }
       --x   else {
-      ---     // These arrays are not used if we're not threaded
+      --x     // These arrays are not used if we're not threaded
       --x     m_nodeElemStart = NULL;
       --x     m_nodeElemCornerList = NULL;
+      --x   }
+      Numthreads : constant OMP.Thread_Count :=
+        (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Max_Threads else 1);
+      use type OMP.Thread_Count;
+   begin
       if Numthreads > 1 then
-         NodeElemCounts := new Node_Element_Count_Array'(This.Nodes'Range => 0);
-         Count_And_Allocate_Elements_For_Each_Node;
-         Calc_First_Element_For_Each_Node;
-         Calc_Nodes_Per_Element_Offset_For_Each_Corner;
-         Check_Each_Nodes_Per_Element_Offset;
-         Release (NodeElemCounts);
-      else
-         NodeElemStart      := null;
-         NodeElemCornerList := null;
-         --x   }
+         for Element in This.Elements'Range loop
+            for Element_Node in This.Elements (Element).Corner_Nodes'Range loop
+               This.Nodes (Element_Node).Elements_Is_Corner_Of.Append (Element);
+            end loop;
+         end loop;
       end if;
       --x }
    end SetupThreadSupportStructures;
-
 
    --- ////////////////////////////////////////////////////////////////////////////////
    --x void
