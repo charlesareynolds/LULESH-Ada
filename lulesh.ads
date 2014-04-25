@@ -4,6 +4,7 @@ with Ada.Exceptions;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Numerics.Generic_Real_Arrays;
 with Ada.Real_Time;
+with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 with Interfaces;
 with MPI;
@@ -336,7 +337,7 @@ package LULESH is
    --- variables named <Name>.
    --- <Name>_Relative types' objects are expected to have an initial value of 1.0.
 
-   subtype Dimensionless    is Mks_Type;
+   subtype Dimensionless        is Mks_Type;
 
    subtype Acceleration         is Mks_Type 
    with Dimension => (Meter => 1, Second => -2, others => 0);
@@ -350,6 +351,9 @@ package LULESH is
    subtype Pressure_Relative    is MKS.Pressure;
    subtype Pressure_Type        is MKS.Pressure;
    subtype Velocity             is MKS.Speed;
+   --- Volume derivitave over volume:
+   subtype VDOV_Type            is MKS_Type
+   with Dimension => (Meter => -1 , others => 0);
    -- Viscosity is like Pressure:
    subtype Viscosity            is MKS_Type
    with Dimension => (Meter => -1, Kilogram => 1, Second => -2, others => 0);
@@ -387,22 +391,12 @@ package LULESH is
    -- Physical quantity arrays:
    -----------------------------------------------------------------------------
 
-   --- Provides matrix and vector math:
-   package Pressure_Arrays is new Ada.Numerics.Generic_Real_Arrays (Pressure);
-   
-   --- Dimension aspects seem to be lost when using a dimensioned type as a
-   --- generic actual parameter. This means that an assignment like:
-   ---      Test1 : constant Area_Vector :=
-   ---          (X => Area(1.0)...
-   --- gets the semantic error:
-   ---         635:15 expected dimension [], found [L**2]   
-
    type Acceleration_Vector is array (Cartesian_Axes) of Acceleration;
    type Area_Vector         is array (Cartesian_Axes) of Area;
    type Coordinate_Vector   is array (Cartesian_Axes) of Length;
    type Force_Vector        is array (Cartesian_Axes) of Force;
    type Gradient_Vector     is array (Natural_Axes) of Gradient_Type;
-   type Pressure_Vector     is new Pressure_Arrays.Real_Vector (Cartesian_Axes);
+   type Pressure_Vector     is array (Cartesian_Axes) of Pressure;
    type Strain_Vector       is array (Cartesian_Axes) of Length;
    type Velocity_Vector     is array (Cartesian_Axes) of Velocity;
    --     type Derivative_Vector is array (Cartesian_Axes) of Derivative_Type;
@@ -595,7 +589,7 @@ package LULESH is
       New_Volume       : Volume_Relative;
       New_Volume_Delta : Volume_Relative;
       --!! delta relative volume over (not reference) volume?  delv/volo?:
-      Volume_Derivative_Over_Volume : Compression_Relative;
+      Volume_Derivative_Over_Volume : VDOV_Type;
       --x    std::vector<Real_t> m_arealg ;  /* characteristic length of an element */
       Characteristic_Length         : Length;
       --x    std::vector<Real_t> m_ss ;      /* "sound speed" */
@@ -829,5 +823,59 @@ private
    procedure Abort_Or_Raise
      (X       : in AEX.Exception_Id;
       Message : in String);
+
+   --- Dimension aspects seem to be lost when using a dimensioned type as a
+   --- generic actual parameter. This means that an assignment like:
+   ---      Test1 : constant Area_Vector :=
+   ---          (X => Area(1.0)...
+   --- gets the semantic error:
+   ---         635:15 expected dimension [], found [L**2]
+   ---
+   --- The types and functions below are to make use of the vector math
+   --- package while preserving dimension aspects:
+
+   --- Provides matrix and vector math:
+   package Area_Arrays     is new Ada.Numerics.Generic_Real_Arrays (Area);
+   package Force_Arrays    is new Ada.Numerics.Generic_Real_Arrays (Force);
+   package Length_Arrays   is new Ada.Numerics.Generic_Real_Arrays (Length);
+--     package Pressure_Arrays is new Ada.Numerics.Generic_Real_Arrays (Pressure);
+
+   type Area_Vector_Math       is new Area_Arrays.Real_Vector (Cartesian_Axes);
+   type Coordinate_Vector_Math is new Length_Arrays.Real_Vector (Cartesian_Axes);
+   type Force_Vector_Math      is new Force_Arrays.Real_Vector (Cartesian_Axes);
+
+   function To_Area_Vector_Math is new
+     Ada.Unchecked_Conversion (Area_Vector, Area_Vector_Math);
+   function To_Area_Vector is new
+     Ada.Unchecked_Conversion (Area_Vector_Math, Area_Vector);
+   function To_Coordinate_Vector_Math is new
+     Ada.Unchecked_Conversion (Coordinate_Vector, Coordinate_Vector_Math);
+   function To_Coordinate_Vector is new
+     Ada.Unchecked_Conversion (Coordinate_Vector_Math, Coordinate_Vector);
+   function To_Force_Vector_Math is new
+     Ada.Unchecked_Conversion (Force_Vector, Force_Vector_Math);
+   function To_Force_Vector is new
+     Ada.Unchecked_Conversion (Force_Vector_Math, Force_Vector);
+
+   function "+" (L, R : in Area_Vector) return Area_Vector is
+     (To_Area_Vector
+        (To_Area_Vector_Math (L) + To_Area_Vector_Math (R)));
+
+   function "+" (L, R : in Coordinate_Vector) return Coordinate_Vector is
+     (To_Coordinate_Vector
+        (To_Coordinate_Vector_Math (L) + To_Coordinate_Vector_Math (R)));
+   function "-" (L, R : in Coordinate_Vector) return Coordinate_Vector is
+     (To_Coordinate_Vector
+        (To_Coordinate_Vector_Math (L) - To_Coordinate_Vector_Math (R)));
+   function "-" (L : in Coordinate_Vector) return Coordinate_Vector is
+     (To_Coordinate_Vector
+        (- To_Coordinate_Vector_Math (L)));
+   function "*" (L : in Float; R : in Coordinate_Vector) return Coordinate_Vector is
+     (To_Coordinate_Vector
+        (Length'Base(L) * To_Coordinate_Vector_Math (R)));
+
+   function "+" (L, R : in Force_Vector) return Force_Vector is
+     (To_Force_Vector
+        (To_Force_Vector_Math (L) + To_Force_Vector_Math (R)));
 
 end LULESH;

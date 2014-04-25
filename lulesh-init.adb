@@ -477,10 +477,9 @@ package body LULESH.Init is
       function Calc_T_Part
         (Loc   : in Domain_Index;
          Nodee : in Node_Index)
-        --- Coordinate vector components aren't dimensioned, so:
-         return Dimensionless is
-        (1.125 * Dimensionless
-           ((Element_Index (Loc) * Side_Length)+
+         return Length is
+        (1.125 * Length
+           ((Element_Index (Loc) * Side_Length) +
                 Element_Index (Nodee) / MeshEdgeElems))
           with Inline;
    begin

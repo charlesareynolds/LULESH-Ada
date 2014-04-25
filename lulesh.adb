@@ -160,62 +160,9 @@
 -- # include <omp.h>
 -- #endif
 
-with Ada.Unchecked_Conversion;
 with LULESH.Comm;
 
 package body LULESH is
-
-   --- Dimension aspects seem to be lost when using a dimensioned type as a
-   --- generic actual parameter. This means that an assignment like:
-   ---      Test1 : constant Area_Vector :=
-   ---          (X => Area(1.0)...
-   --- gets the semantic error:
-   ---         635:15 expected dimension [], found [L**2]
-   ---
-   --- The types and functions below are to make use of the vector math
-   --- package while preserving dimension aspects:
-
-   package Area_Arrays     is new Ada.Numerics.Generic_Real_Arrays (Area);
-   package Force_Arrays    is new Ada.Numerics.Generic_Real_Arrays (Force);
-   package Length_Arrays   is new Ada.Numerics.Generic_Real_Arrays (Length);
-
-   type Area_Vector_Math       is new Area_Arrays.Real_Vector (Cartesian_Axes);
-   type Coordinate_Vector_Math is new Length_Arrays.Real_Vector (Cartesian_Axes);
-   type Force_Vector_Math      is new Force_Arrays.Real_Vector (Cartesian_Axes);
-
-   function To_Area_Vector_Math is new
-     Ada.Unchecked_Conversion (Area_Vector, Area_Vector_Math);
-   function To_Area_Vector is new
-     Ada.Unchecked_Conversion (Area_Vector_Math, Area_Vector);
-   function To_Coordinate_Vector_Math is new
-     Ada.Unchecked_Conversion (Coordinate_Vector, Coordinate_Vector_Math);
-   function To_Coordinate_Vector is new
-     Ada.Unchecked_Conversion (Coordinate_Vector_Math, Coordinate_Vector);
-   function To_Force_Vector_Math is new
-     Ada.Unchecked_Conversion (Force_Vector, Force_Vector_Math);
-   function To_Force_Vector is new
-     Ada.Unchecked_Conversion (Force_Vector_Math, Force_Vector);
-
-   function "+" (L, R : in Area_Vector) return Area_Vector is
-     (To_Area_Vector
-        (To_Area_Vector_Math (L) + To_Area_Vector_Math (R)));
-
-   function "+" (L, R : in Coordinate_Vector) return Coordinate_Vector is
-     (To_Coordinate_Vector
-        (To_Coordinate_Vector_Math (L) + To_Coordinate_Vector_Math (R)));
-   function "-" (L, R : in Coordinate_Vector) return Coordinate_Vector is
-     (To_Coordinate_Vector
-        (To_Coordinate_Vector_Math (L) - To_Coordinate_Vector_Math (R)));
-   function "-" (L : in Coordinate_Vector) return Coordinate_Vector is
-     (To_Coordinate_Vector
-        (- To_Coordinate_Vector_Math (L)));
-   function "*" (L : in Float; R : in Coordinate_Vector) return Coordinate_Vector is
-     (To_Coordinate_Vector
-        (Length'Base(L) * To_Coordinate_Vector_Math (R)));
-
-   function "+" (L, R : in Force_Vector) return Force_Vector is
-     (To_Force_Vector
-        (To_Force_Vector_Math (L) + To_Force_Vector_Math (R)));
 
    --- /*********************************/
    --- /* Data structure implementation */
@@ -417,18 +364,11 @@ package body LULESH is
       --x       sigxx[i] = sigyy[i] = sigzz[i] =  - domain.p(i) - domain.q(i) ;
       --x    }
       for Element in domain.elements'Range loop
-         --- Dimension aspects seem to be lost when using a dimensioned type as a
-         --- generic actual parameter. This means that an assignment like:
-         ---      Test1 : constant Area_Vector :=
-         ---          (X => Area(1.0)...
-         --- gets the semantic error:
-         ---         635:15 expected dimension [], found [L**2]
-         --- So Pressure'Base, below, has dimension []
          pragma Warnings (Off, "redundant conversion, expression is of type ""MKS_TYPE""");
          stress_integrated (element) :=
-           (others => Pressure'Base
-              (- domain.elements(element).Pressure
-               - Pressure (domain.elements(element).artificial_viscosity)));
+           (others =>
+              - Domain.Elements (Element).Pressure
+            - Pressure (Domain.Elements (Element).Artificial_Viscosity));
            pragma Warnings (On, "redundant conversion, expression is of type ""MKS_TYPE""");
       end loop;
       --x }
@@ -788,10 +728,10 @@ package body LULESH is
    --x       fy[i] = -( stress_yy * B[1][i] );
    --x       fz[i] = -( stress_zz * B[2][i] );
    --x    }
-      for node in Element_Node_Numbers loop
-         for axis in Cartesian_Axes loop
-            node_forces(node)(axis) :=
-              -(element_stress(axis) * node_areas(node)(axis));
+      for Node in Element_Node_Numbers loop
+         for Axis in Cartesian_Axes loop
+            Node_Forces (Node) (Axis) :=
+              -(Element_Stress (Axis) * Node_Areas (Node) (Axis));
          end loop;
       end loop;
    --x }
@@ -832,7 +772,7 @@ package body LULESH is
       --x   if (numthreads > 1) {
       ---      // If threaded, then we need to copy the data out of the temporary
       ---      // arrays used above into the final forces field
-      --- #pragma omp parallel for firstprivate(numNode)
+      -- #pragma omp parallel for firstprivate(numNode)
       --x      for( Index_t gnode=0 ; gnode<numNode ; ++gnode )
       --x      {
       --x         Index_t count = domain.nodeElemCount(gnode) ;
@@ -846,13 +786,13 @@ package body LULESH is
       --x            fy_tmp += fy_elem[elem] ;
       --x            fz_tmp += fz_elem[elem] ;
       --x         }
-      --         domain.fx(gnode) = fx_tmp ;
-      --         domain.fy(gnode) = fy_tmp ;
-      --         domain.fz(gnode) = fz_tmp ;
-      --      }
-      --      Release(&fz_elem) ;
-      --      Release(&fy_elem) ;
-      --      Release(&fx_elem) ;
+      --x         domain.fx(gnode) = fx_tmp ;
+      --x         domain.fy(gnode) = fy_tmp ;
+      --x         domain.fz(gnode) = fz_tmp ;
+      --x      }
+      --x      Release(&fz_elem) ;
+      --x      Release(&fy_elem) ;
+      --x      Release(&fx_elem) ;
       --x   }
       procedure Copy_Data_Out_If_Threaded is
       begin
@@ -1049,7 +989,7 @@ package body LULESH is
          + (fc(3)(x) + fc(5)(x)) * (fc(2)(y) + fc(5)(y))
          - (Fc(2)(x) + Fc(5)(x)) * (Fc(3)(y) + Fc(5)(y)));
       pragma Warnings (On, "unary minus expression should be parenthesized here");
-      -- }
+      --x }
       return Dvd;
    end VoluDer;
 
@@ -1113,336 +1053,415 @@ package body LULESH is
 
    --- /******************************************/
 
-   -- static inline
-   -- void CalcElemFBHourglassForce(Real_t *xd, Real_t *yd, Real_t *zd,  Real_t hourgam[][4],
-   --                               Real_t coefficient,
-   --                               Real_t *hgfx, Real_t *hgfy, Real_t *hgfz )
-   -- {
-   --    Real_t hxx[4];
-   --    for(Index_t i = 0; i < 4; i++) {
-   --       hxx[i] = hourgam[0][i] * xd[0] + hourgam[1][i] * xd[1] +
-   --                hourgam[2][i] * xd[2] + hourgam[3][i] * xd[3] +
-   --                hourgam[4][i] * xd[4] + hourgam[5][i] * xd[5] +
-   --                hourgam[6][i] * xd[6] + hourgam[7][i] * xd[7];
-   --    }
-   --    for(Index_t i = 0; i < 8; i++) {
-   --       hgfx[i] = coefficient *
-   --                 (hourgam[i][0] * hxx[0] + hourgam[i][1] * hxx[1] +
-   --                  hourgam[i][2] * hxx[2] + hourgam[i][3] * hxx[3]);
-   --    }
-   --    for(Index_t i = 0; i < 4; i++) {
-   --       hxx[i] = hourgam[0][i] * yd[0] + hourgam[1][i] * yd[1] +
-   --                hourgam[2][i] * yd[2] + hourgam[3][i] * yd[3] +
-   --                hourgam[4][i] * yd[4] + hourgam[5][i] * yd[5] +
-   --                hourgam[6][i] * yd[6] + hourgam[7][i] * yd[7];
-   --    }
-   --    for(Index_t i = 0; i < 8; i++) {
-   --       hgfy[i] = coefficient *
-   --                 (hourgam[i][0] * hxx[0] + hourgam[i][1] * hxx[1] +
-   --                  hourgam[i][2] * hxx[2] + hourgam[i][3] * hxx[3]);
-   --    }
-   --    for(Index_t i = 0; i < 4; i++) {
-   --       hxx[i] = hourgam[0][i] * zd[0] + hourgam[1][i] * zd[1] +
-   --                hourgam[2][i] * zd[2] + hourgam[3][i] * zd[3] +
-   --                hourgam[4][i] * zd[4] + hourgam[5][i] * zd[5] +
-   --                hourgam[6][i] * zd[6] + hourgam[7][i] * zd[7];
-   --    }
-   --    for(Index_t i = 0; i < 8; i++) {
-   --       hgfz[i] = coefficient *
-   --                 (hourgam[i][0] * hxx[0] + hourgam[i][1] * hxx[1] +
-   --                  hourgam[i][2] * hxx[2] + hourgam[i][3] * hxx[3]);
-   --    }
-   -- }
+   --x  static inline
+   --x  void CalcElemFBHourglassForce(Real_t *xd, Real_t *yd, Real_t *zd,  Real_t hourgam[][4],
+   --x                                Real_t coefficient,
+   --x                                Real_t *hgfx, Real_t *hgfy, Real_t *hgfz )
+   --x  {
+   procedure CalcElemFBHourglassForce
+     (D           : in T_8_Cartesian_Array;
+      Hourgam     : in T_8_4_Array;
+      Coefficient : in Dimensionless;
+      HGF         : out Nodes_Per_Element_Force_Vector_Array)
+     with Inline
+   is
+   Hxx : T_8_Force_Array;
+   begin
+      --x     Real_t hxx[4];
+      --x     for(Index_t i = 0; i < 4; i++) {
+      --x        hxx[i] = hourgam[0][i] * xd[0] + hourgam[1][i] * xd[1] +
+      --x                 hourgam[2][i] * xd[2] + hourgam[3][i] * xd[3] +
+      --x                 hourgam[4][i] * xd[4] + hourgam[5][i] * xd[5] +
+      --x                 hourgam[6][i] * xd[6] + hourgam[7][i] * xd[7];
+      --x     }
+      --x     for(Index_t i = 0; i < 8; i++) {
+      --x        hgfx[i] = coefficient *
+      --x                  (hourgam[i][0] * hxx[0] + hourgam[i][1] * hxx[1] +
+      --x                   hourgam[i][2] * hxx[2] + hourgam[i][3] * hxx[3]);
+      --x     }
+      --x     for(Index_t i = 0; i < 4; i++) {
+      --x        hxx[i] = hourgam[0][i] * yd[0] + hourgam[1][i] * yd[1] +
+      --x                 hourgam[2][i] * yd[2] + hourgam[3][i] * yd[3] +
+      --x                 hourgam[4][i] * yd[4] + hourgam[5][i] * yd[5] +
+      --x                 hourgam[6][i] * yd[6] + hourgam[7][i] * yd[7];
+      --x     }
+      --x     for(Index_t i = 0; i < 8; i++) {
+      --x        hgfy[i] = coefficient *
+      --x                  (hourgam[i][0] * hxx[0] + hourgam[i][1] * hxx[1] +
+      --x                   hourgam[i][2] * hxx[2] + hourgam[i][3] * hxx[3]);
+      --x     }
+      --x     for(Index_t i = 0; i < 4; i++) {
+      --x        hxx[i] = hourgam[0][i] * zd[0] + hourgam[1][i] * zd[1] +
+      --x                 hourgam[2][i] * zd[2] + hourgam[3][i] * zd[3] +
+      --x                 hourgam[4][i] * zd[4] + hourgam[5][i] * zd[5] +
+      --x                 hourgam[6][i] * zd[6] + hourgam[7][i] * zd[7];
+      --x     }
+      --x     for(Index_t i = 0; i < 8; i++) {
+      --x        hgfz[i] = coefficient *
+      --x                  (hourgam[i][0] * hxx[0] + hourgam[i][1] * hxx[1] +
+      --x                   hourgam[i][2] * hxx[2] + hourgam[i][3] * hxx[3]);
+      --x     }
+      --x }
+      Hgf := (others => (others => Force(0.0)));
+      for Axis in Cartesian_Axes loop
+         Hxx := (others => 0.0);
+         for I in Hxx'Range loop
+            for J in Hourgam'Range (1) loop
+               Hxx (I) := Hxx + Hourgam (J) (I) * D (J) (Axis);
+            end loop;
+         end loop;
+         for I in HGF'Range (1) loop
+            for J in  HGF (I)'Range loop
+               Hgf (I) (Axis) := Hgf (I) (Axis) + Hourgam (I) (J) * Hxx (J);
+            end loop;
+            Hgf (I) (Axis) := Hgf (I) (Axis) * Coefficient;
+         end loop;
+      end loop;
+   end CalcElemFBHourglassForce;
 
-   -- /******************************************/
+   --- /******************************************/
 
-   -- static inline
-   -- void CalcFBHourglassForceForElems( Domain &domain,
-   --                                    Real_t *determ,
-   --                                    Real_t *x8n, Real_t *y8n, Real_t *z8n,
-   --                                    Real_t *dvdx, Real_t *dvdy, Real_t *dvdz,
-   --                                    Real_t hourg, Index_t numElem,
-   --                                    Index_t numNode)
-   -- {
+   --x static inline
+   --x void CalcFBHourglassForceForElems( Domain &domain,
+   --x                                    Real_t *determ,
+   --x                                    Real_t *x8n, Real_t *y8n, Real_t *z8n,
+   --x                                    Real_t *dvdx, Real_t *dvdy, Real_t *dvdz,
+   --x                                    Real_t hourg, Index_t numElem,
+   --x                                    Index_t numNode)
+   --x {
+   procedure CalcFBHourglassForceForElems
+     (Domain : access Domain_Record;
+      Determ : in Real_Array;
+      N      : in T_8_Cartesian_Real_Array;
+      Dvd    : in Coordinate_Vector;
+      Hourg  : in Dimensionless)
+     with Inline
+   is
+      --x #if _OPENMP
+      --x    Index_t numthreads = omp_get_max_threads();
+      --x #else
+      --x    Index_t numthreads = 1;
+      --x #endif
+      Numthreads : constant OMP.Thread_Count :=
+        (if COMPILER_SUPPORTS_OPENMP then OMP.Get_Num_Threads else 1);
+      ---    /*************************************************
+      ---     *
+      ---     *     FUNCTION: Calculates the Flanagan-Belytschko anti-hourglass
+      ---     *               force.
+      ---     *
+      ---     *************************************************/
+      --x    Index_t numElem8 = numElem * 8 ;
+      --x    Real_t *fx_elem;
+      --x    Real_t *fy_elem;
+      --x    Real_t *fz_elem;
+      --x    if(numthreads > 1) {
+      --x       fx_elem = Allocate<Real_t>(numElem8) ;
+      --x       fy_elem = Allocate<Real_t>(numElem8) ;
+      --x       fz_elem = Allocate<Real_t>(numElem8) ;
+      --x    }
+      F_Elem : Element_Force_Vector_Array_Access :=
+        (if Numthreads > 1 then
+            new Element_Force_Vector_Array (Domain.Elements'Range)
+         else
+            null);
+      --x    Real_t  gamma[4][8];
+      --x    gamma[0][0] = Real_t( 1.);
+      --x    gamma[0][1] = Real_t( 1.);
+      --x    gamma[0][2] = Real_t(-1.);
+      --x    gamma[0][3] = Real_t(-1.);
+      --x    gamma[0][4] = Real_t(-1.);
+      --x    gamma[0][5] = Real_t(-1.);
+      --x    gamma[0][6] = Real_t( 1.);
+      --x    gamma[0][7] = Real_t( 1.);
+      --x    gamma[1][0] = Real_t( 1.);
+      --x    gamma[1][1] = Real_t(-1.);
+      --x    gamma[1][2] = Real_t(-1.);
+      --x    gamma[1][3] = Real_t( 1.);
+      --x    gamma[1][4] = Real_t(-1.);
+      --x    gamma[1][5] = Real_t( 1.);
+      --x    gamma[1][6] = Real_t( 1.);
+      --x    gamma[1][7] = Real_t(-1.);
+      --x    gamma[2][0] = Real_t( 1.);
+      --x    gamma[2][1] = Real_t(-1.);
+      --x    gamma[2][2] = Real_t( 1.);
+      --x    gamma[2][3] = Real_t(-1.);
+      --x    gamma[2][4] = Real_t( 1.);
+      --x    gamma[2][5] = Real_t(-1.);
+      --x    gamma[2][6] = Real_t( 1.);
+      --x    gamma[2][7] = Real_t(-1.);
+      --x    gamma[3][0] = Real_t(-1.);
+      --x    gamma[3][1] = Real_t( 1.);
+      --x    gamma[3][2] = Real_t(-1.);
+      --x    gamma[3][3] = Real_t( 1.);
+      --x    gamma[3][4] = Real_t( 1.);
+      --x    gamma[3][5] = Real_t(-1.);
+      --x    gamma[3][6] = Real_t( 1.);
+      --x    gamma[3][7] = Real_t(-1.);
+      Gamma : constant T_4_8_Array :=
+        (0 => (1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 1.0),
+         1 => (1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0),
+         2 => (1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0),
+         3 => (-1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0));
+      --- /*************************************************/
+      --- /*    compute the hourglass modes */
+   begin
+      -- #pragma omp parallel for firstprivate(numElem, hourg)
+      --x    for(Index_t i2=0;i2<numElem;++i2){
+      for Element in Domain.Elements'Range loop
+         declare
+            --x       Real_t *fx_local, *fy_local, *fz_local ;
+            --x       Real_t hgfx[8], hgfy[8], hgfz[8] ;
+            --x       Real_t coefficient;
+            --x       Real_t hourgam[8][4];
+            --x       Real_t xd1[8], yd1[8], zd1[8] ;
+            --x       const Index_t *elemToNode = domain.nodelist(i2);
+            --x       Index_t i3=8*i2;
+            --x       Real_t volinv=Real_t(1.0)/determ[i2];
+            --x       Real_t ss1, mass1, volume13 ;
+            F_Local     : Force_Vector;
+            Hgf         : Nodes_Per_Element_Force_Vector_Array;
+            Coefficient : Dimensionless;
+            Hourgam     : T_8_4_Array;
+            D1          : Nodes_Per_Element_Coordinate_Array;
+            ElemToNode  : constant Nodes_Per_Element_Node_Index_Array :=
+              Domain.Elements (Element).Corner_Nodes;
+            Volinv      : Volinv_Type := 1.0 / Determ (Element);
+            Ss1         : Velocity;
+            Mass1       : Mass;
+            Volume13    : Volume_Relative;
+         begin
+            --x       for(Index_t i1=0;i1<4;++i1){
+            for I1 in 0 .. 3 loop
+               declare
+                  --x          Real_t hourmodx =
+                  --x             x8n[i3] * gamma[i1][0] + x8n[i3+1] * gamma[i1][1] +
+                  --x             x8n[i3+2] * gamma[i1][2] + x8n[i3+3] * gamma[i1][3] +
+                  --x             x8n[i3+4] * gamma[i1][4] + x8n[i3+5] * gamma[i1][5] +
+                  --x             x8n[i3+6] * gamma[i1][6] + x8n[i3+7] * gamma[i1][7];
+                  Hourmodx : constant Dimensionless :=
+                    N (Element) (0) (X) * Gamma (I1) (0) +
+                    N (Element) (1) (X) * Gamma (I1) (1) +
+                    N (Element) (2) (X) * Gamma (I1) (2) +
+                    N (Element) (3) (X) * Gamma (I1) (3) +
+                    N (Element) (4) (X) * Gamma (I1) (4) +
+                    N (Element) (5) (X) * Gamma (I1) (5) +
+                    N (Element) (6) (X) * Gamma (I1) (6) +
+                    N (Element) (7) (X) * Gamma (I1) (7);
+                  --          Real_t hourmody =
+                  --             y8n[i3] * gamma[i1][0] + y8n[i3+1] * gamma[i1][1] +
+                  --             y8n[i3+2] * gamma[i1][2] + y8n[i3+3] * gamma[i1][3] +
+                  --             y8n[i3+4] * gamma[i1][4] + y8n[i3+5] * gamma[i1][5] +
+                  --             y8n[i3+6] * gamma[i1][6] + y8n[i3+7] * gamma[i1][7];
+                  --          Real_t hourmodz =
+                  --             z8n[i3] * gamma[i1][0] + z8n[i3+1] * gamma[i1][1] +
+                  --             z8n[i3+2] * gamma[i1][2] + z8n[i3+3] * gamma[i1][3] +
+                  --             z8n[i3+4] * gamma[i1][4] + z8n[i3+5] * gamma[i1][5] +
+                  --             z8n[i3+6] * gamma[i1][6] + z8n[i3+7] * gamma[i1][7];
+               begin
+                  --          hourgam[0][i1] = gamma[i1][0] -  volinv*(dvdx[i3  ] * hourmodx +
+                  --                                                   dvdy[i3  ] * hourmody +
+                  --                                                   dvdz[i3  ] * hourmodz );
+                  Hourgam (0) (I1) :=  Gamma (I1) (0) -
+                    Volinv * (Dvd (Element) (X) * Hourmod (X) +
+                                  Dvd (Element) (Y) * Hourmod (Y) +
+                                  Dvd (Element) (Z) * Hourmod (Z));
+                  --          hourgam[1][i1] = gamma[i1][1] -  volinv*(dvdx[i3+1] * hourmodx +
+                  --                                                   dvdy[i3+1] * hourmody +
+                  --                                                   dvdz[i3+1] * hourmodz );
+                  --          hourgam[2][i1] = gamma[i1][2] -  volinv*(dvdx[i3+2] * hourmodx +
+                  --                                                   dvdy[i3+2] * hourmody +
+                  --                                                   dvdz[i3+2] * hourmodz );
+                  --          hourgam[3][i1] = gamma[i1][3] -  volinv*(dvdx[i3+3] * hourmodx +
+                  --                                                   dvdy[i3+3] * hourmody +
+                  --                                                   dvdz[i3+3] * hourmodz );
+                  --          hourgam[4][i1] = gamma[i1][4] -  volinv*(dvdx[i3+4] * hourmodx +
+                  --                                                   dvdy[i3+4] * hourmody +
+                  --                                                   dvdz[i3+4] * hourmodz );
+                  --          hourgam[5][i1] = gamma[i1][5] -  volinv*(dvdx[i3+5] * hourmodx +
+                  --                                                   dvdy[i3+5] * hourmody +
+                  --                                                   dvdz[i3+5] * hourmodz );
+                  --          hourgam[6][i1] = gamma[i1][6] -  volinv*(dvdx[i3+6] * hourmodx +
+                  --                                                   dvdy[i3+6] * hourmody +
+                  --                                                   dvdz[i3+6] * hourmodz );
+                  --          hourgam[7][i1] = gamma[i1][7] -  volinv*(dvdx[i3+7] * hourmodx +
+                  --                                                   dvdy[i3+7] * hourmody +
+                  --                                                   dvdz[i3+7] * hourmodz );
+                  --x       }
+               end;
+            end loop;
+            ---       /* compute forces */
+            ---       /* store forces into h arrays (force arrays) */
 
-   -- #if _OPENMP
-   --    Index_t numthreads = omp_get_max_threads();
-   -- #else
-   --    Index_t numthreads = 1;
-   -- #endif
-   --    /*************************************************
-   --     *
-   --     *     FUNCTION: Calculates the Flanagan-Belytschko anti-hourglass
-   --     *               force.
-   --     *
-   --     *************************************************/
+            --x       ss1=domain.ss(i2);
+            --x       mass1=domain.elemMass(i2);
+            --x       volume13=CBRT(determ[i2]);
+            Ss1 := Domain.Elements (Element).Sound_Speed;
+            Mass1 := Domain.Elements (Element).Mass;
+            Volume13 := CBRT (Determ (Element));
 
-   --    Index_t numElem8 = numElem * 8 ;
+            --       Index_t n0si2 = elemToNode[0];
+            --       Index_t n1si2 = elemToNode[1];
+            --       Index_t n2si2 = elemToNode[2];
+            --       Index_t n3si2 = elemToNode[3];
+            --       Index_t n4si2 = elemToNode[4];
+            --       Index_t n5si2 = elemToNode[5];
+            --       Index_t n6si2 = elemToNode[6];
+            --       Index_t n7si2 = elemToNode[7];
 
-   --    Real_t *fx_elem;
-   --    Real_t *fy_elem;
-   --    Real_t *fz_elem;
+            --x       xd1[0] = domain.xd(n0si2);
+            --       xd1[1] = domain.xd(n1si2);
+            --       xd1[2] = domain.xd(n2si2);
+            --       xd1[3] = domain.xd(n3si2);
+            --       xd1[4] = domain.xd(n4si2);
+            --       xd1[5] = domain.xd(n5si2);
+            --       xd1[6] = domain.xd(n6si2);
+            --       xd1[7] = domain.xd(n7si2);
+            D1 (0) (X) := Domain.Nodes (ElemToNode (0)).Velocity (X);
 
-   --    if(numthreads > 1) {
-   --       fx_elem = Allocate<Real_t>(numElem8) ;
-   --       fy_elem = Allocate<Real_t>(numElem8) ;
-   --       fz_elem = Allocate<Real_t>(numElem8) ;
-   --    }
+            --       yd1[0] = domain.yd(n0si2);
+            --       yd1[1] = domain.yd(n1si2);
+            --       yd1[2] = domain.yd(n2si2);
+            --       yd1[3] = domain.yd(n3si2);
+            --       yd1[4] = domain.yd(n4si2);
+            --       yd1[5] = domain.yd(n5si2);
+            --       yd1[6] = domain.yd(n6si2);
+            --       yd1[7] = domain.yd(n7si2);
 
-   --    Real_t  gamma[4][8];
+            --       zd1[0] = domain.zd(n0si2);
+            --       zd1[1] = domain.zd(n1si2);
+            --       zd1[2] = domain.zd(n2si2);
+            --       zd1[3] = domain.zd(n3si2);
+            --       zd1[4] = domain.zd(n4si2);
+            --       zd1[5] = domain.zd(n5si2);
+            --       zd1[6] = domain.zd(n6si2);
+            --       zd1[7] = domain.zd(n7si2);
 
-   --    gamma[0][0] = Real_t( 1.);
-   --    gamma[0][1] = Real_t( 1.);
-   --    gamma[0][2] = Real_t(-1.);
-   --    gamma[0][3] = Real_t(-1.);
-   --    gamma[0][4] = Real_t(-1.);
-   --    gamma[0][5] = Real_t(-1.);
-   --    gamma[0][6] = Real_t( 1.);
-   --    gamma[0][7] = Real_t( 1.);
+            --x       coefficient = - hourg * Real_t(0.01) * ss1 * mass1 / volume13;
+            Coefficient := - Hourg * 0.01 * Ss1 * Mass1 / Volume13;
+            --x       CalcElemFBHourglassForce(xd1,yd1,zd1,
+            --x                       hourgam,
+            --x                       coefficient, hgfx, hgfy, hgfz);
+            CalcElemFBHourglassForce (D           => d1,
+                                      Hourgam     => hourgam,
+                                      Coefficient => coefficient,
+                                      HGF         => HGF);
+            ---       // With the threaded version, we write into local arrays per elem
+            ---       // so we don't have to worry about race conditions
+            --x       if (numthreads > 1) {
+            if Numthreads > 1 then
+            --x          fx_local = &fx_elem[i3] ;
+            --x          fx_local[0] = hgfx[0];
+            --          fx_local[1] = hgfx[1];
+            --          fx_local[2] = hgfx[2];
+            --          fx_local[3] = hgfx[3];
+            --          fx_local[4] = hgfx[4];
+            --          fx_local[5] = hgfx[5];
+            --          fx_local[6] = hgfx[6];
+            --          fx_local[7] = hgfx[7];
+                    F_Elem (Element)(0)(X) := Hgf (0)(X);
 
-   --    gamma[1][0] = Real_t( 1.);
-   --    gamma[1][1] = Real_t(-1.);
-   --    gamma[1][2] = Real_t(-1.);
-   --    gamma[1][3] = Real_t( 1.);
-   --    gamma[1][4] = Real_t(-1.);
-   --    gamma[1][5] = Real_t( 1.);
-   --    gamma[1][6] = Real_t( 1.);
-   --    gamma[1][7] = Real_t(-1.);
+            --          fy_local = &fy_elem[i3] ;
+            --          fy_local[0] = hgfy[0];
+            --          fy_local[1] = hgfy[1];
+            --          fy_local[2] = hgfy[2];
+            --          fy_local[3] = hgfy[3];
+            --          fy_local[4] = hgfy[4];
+            --          fy_local[5] = hgfy[5];
+            --          fy_local[6] = hgfy[6];
+            --          fy_local[7] = hgfy[7];
 
-   --    gamma[2][0] = Real_t( 1.);
-   --    gamma[2][1] = Real_t(-1.);
-   --    gamma[2][2] = Real_t( 1.);
-   --    gamma[2][3] = Real_t(-1.);
-   --    gamma[2][4] = Real_t( 1.);
-   --    gamma[2][5] = Real_t(-1.);
-   --    gamma[2][6] = Real_t( 1.);
-   --    gamma[2][7] = Real_t(-1.);
+            --          fz_local = &fz_elem[i3] ;
+            --          fz_local[0] = hgfz[0];
+            --          fz_local[1] = hgfz[1];
+            --          fz_local[2] = hgfz[2];
+            --          fz_local[3] = hgfz[3];
+            --          fz_local[4] = hgfz[4];
+            --          fz_local[5] = hgfz[5];
+            --          fz_local[6] = hgfz[6];
+            --          fz_local[7] = hgfz[7];
+            --x       }
+            --x       else {
+            else
+            --x          domain.fx(n0si2) += hgfx[0];
+            --          domain.fy(n0si2) += hgfy[0];
+            --          domain.fz(n0si2) += hgfz[0];
+               domain.Nodes (ElemToNode (0)).Force (X) :=
+                 domain.Nodes (ElemToNode (0)).Force (X) + HGF (0) (X);
 
-   --    gamma[3][0] = Real_t(-1.);
-   --    gamma[3][1] = Real_t( 1.);
-   --    gamma[3][2] = Real_t(-1.);
-   --    gamma[3][3] = Real_t( 1.);
-   --    gamma[3][4] = Real_t( 1.);
-   --    gamma[3][5] = Real_t(-1.);
-   --    gamma[3][6] = Real_t( 1.);
-   --    gamma[3][7] = Real_t(-1.);
+            --          domain.fx(n1si2) += hgfx[1];
+            --          domain.fy(n1si2) += hgfy[1];
+            --          domain.fz(n1si2) += hgfz[1];
 
-   -- /*************************************************/
-   -- /*    compute the hourglass modes */
+            --          domain.fx(n2si2) += hgfx[2];
+            --          domain.fy(n2si2) += hgfy[2];
+            --          domain.fz(n2si2) += hgfz[2];
 
+            --          domain.fx(n3si2) += hgfx[3];
+            --          domain.fy(n3si2) += hgfy[3];
+            --          domain.fz(n3si2) += hgfz[3];
 
-   -- #pragma omp parallel for firstprivate(numElem, hourg)
-   --    for(Index_t i2=0;i2<numElem;++i2){
-   --       Real_t *fx_local, *fy_local, *fz_local ;
-   --       Real_t hgfx[8], hgfy[8], hgfz[8] ;
+            --          domain.fx(n4si2) += hgfx[4];
+            --          domain.fy(n4si2) += hgfy[4];
+            --          domain.fz(n4si2) += hgfz[4];
 
-   --       Real_t coefficient;
+            --          domain.fx(n5si2) += hgfx[5];
+            --          domain.fy(n5si2) += hgfy[5];
+            --          domain.fz(n5si2) += hgfz[5];
 
-   --       Real_t hourgam[8][4];
-   --       Real_t xd1[8], yd1[8], zd1[8] ;
+            --          domain.fx(n6si2) += hgfx[6];
+            --          domain.fy(n6si2) += hgfy[6];
+            --          domain.fz(n6si2) += hgfz[6];
 
-   --       const Index_t *elemToNode = domain.nodelist(i2);
-   --       Index_t i3=8*i2;
-   --       Real_t volinv=Real_t(1.0)/determ[i2];
-   --       Real_t ss1, mass1, volume13 ;
-   --       for(Index_t i1=0;i1<4;++i1){
+            --          domain.fx(n7si2) += hgfx[7];
+            --          domain.fy(n7si2) += hgfy[7];
+            --          domain.fz(n7si2) += hgfz[7];
+            --x       }
+            end if;
+            --x    }
+         end;
+      end loop;
+      --x    if (numthreads > 1) {
+      if Numthreads > 1 then
+         ---      // Collect the data from the local arrays into the final force arrays
+         -- #pragma omp parallel for firstprivate(numNode)
+         --x       for( Index_t gnode=0 ; gnode<numNode ; ++gnode )
+         --x       {
+         for Node in Domain.Nodes'Range loop
+            declare
+               --          Index_t count = domain.nodeElemCount(gnode) ;
+               --          Index_t *cornerList = domain.nodeElemCornerList(gnode) ;
+               --x          Real_t fx_tmp = Real_t(0.0) ;
+               --x          Real_t fy_tmp = Real_t(0.0) ;
+               --x          Real_t fz_tmp = Real_t(0.0) ;
+               F_Tmp : Force_Vector := (others => Force (0.0));
+            begin
+               --          for (Index_t i=0 ; i < count ; ++i) {
+               for Corner_Element in Domain.Nodes (Node).Elements_Is_Corner_Of.Iterate loop
+                  --:             Index_t elem = cornerList[i] ;
+                               Index_t := elem = CornerList(I);
 
-   --          Real_t hourmodx =
-   --             x8n[i3] * gamma[i1][0] + x8n[i3+1] * gamma[i1][1] +
-   --             x8n[i3+2] * gamma[i1][2] + x8n[i3+3] * gamma[i1][3] +
-   --             x8n[i3+4] * gamma[i1][4] + x8n[i3+5] * gamma[i1][5] +
-   --             x8n[i3+6] * gamma[i1][6] + x8n[i3+7] * gamma[i1][7];
+               --             fx_tmp += fx_elem[elem] ;
+               --             fy_tmp += fy_elem[elem] ;
+               --             fz_tmp += fz_elem[elem] ;
+               --x          }
+               end loop;
+               --x          domain.fx(gnode) += fx_tmp ;
+               --x          domain.fy(gnode) += fy_tmp ;
+               --x          domain.fz(gnode) += fz_tmp ;
+               Domain.Nodes(Gnode).Force := Domain.Nodes(Gnode).Force + F_Tmp;
+               --x       }
+            end;
+         end loop;
+         --x       Release(&fz_elem) ;
+         --x       Release(&fy_elem) ;
+         --x       Release(&fx_elem) ;
+         Release (F_Elem);
+         --x    }
+      end if;
+      --x }
+   end CalcFBHourglassForceForElems;
 
-   --          Real_t hourmody =
-   --             y8n[i3] * gamma[i1][0] + y8n[i3+1] * gamma[i1][1] +
-   --             y8n[i3+2] * gamma[i1][2] + y8n[i3+3] * gamma[i1][3] +
-   --             y8n[i3+4] * gamma[i1][4] + y8n[i3+5] * gamma[i1][5] +
-   --             y8n[i3+6] * gamma[i1][6] + y8n[i3+7] * gamma[i1][7];
-
-   --          Real_t hourmodz =
-   --             z8n[i3] * gamma[i1][0] + z8n[i3+1] * gamma[i1][1] +
-   --             z8n[i3+2] * gamma[i1][2] + z8n[i3+3] * gamma[i1][3] +
-   --             z8n[i3+4] * gamma[i1][4] + z8n[i3+5] * gamma[i1][5] +
-   --             z8n[i3+6] * gamma[i1][6] + z8n[i3+7] * gamma[i1][7];
-
-   --          hourgam[0][i1] = gamma[i1][0] -  volinv*(dvdx[i3  ] * hourmodx +
-   --                                                   dvdy[i3  ] * hourmody +
-   --                                                   dvdz[i3  ] * hourmodz );
-
-   --          hourgam[1][i1] = gamma[i1][1] -  volinv*(dvdx[i3+1] * hourmodx +
-   --                                                   dvdy[i3+1] * hourmody +
-   --                                                   dvdz[i3+1] * hourmodz );
-
-   --          hourgam[2][i1] = gamma[i1][2] -  volinv*(dvdx[i3+2] * hourmodx +
-   --                                                   dvdy[i3+2] * hourmody +
-   --                                                   dvdz[i3+2] * hourmodz );
-
-   --          hourgam[3][i1] = gamma[i1][3] -  volinv*(dvdx[i3+3] * hourmodx +
-   --                                                   dvdy[i3+3] * hourmody +
-   --                                                   dvdz[i3+3] * hourmodz );
-
-   --          hourgam[4][i1] = gamma[i1][4] -  volinv*(dvdx[i3+4] * hourmodx +
-   --                                                   dvdy[i3+4] * hourmody +
-   --                                                   dvdz[i3+4] * hourmodz );
-
-   --          hourgam[5][i1] = gamma[i1][5] -  volinv*(dvdx[i3+5] * hourmodx +
-   --                                                   dvdy[i3+5] * hourmody +
-   --                                                   dvdz[i3+5] * hourmodz );
-
-   --          hourgam[6][i1] = gamma[i1][6] -  volinv*(dvdx[i3+6] * hourmodx +
-   --                                                   dvdy[i3+6] * hourmody +
-   --                                                   dvdz[i3+6] * hourmodz );
-
-   --          hourgam[7][i1] = gamma[i1][7] -  volinv*(dvdx[i3+7] * hourmodx +
-   --                                                   dvdy[i3+7] * hourmody +
-   --                                                   dvdz[i3+7] * hourmodz );
-
-   --       }
-
-   --       /* compute forces */
-   --       /* store forces into h arrays (force arrays) */
-
-   --       ss1=domain.ss(i2);
-   --       mass1=domain.elemMass(i2);
-   --       volume13=CBRT(determ[i2]);
-
-   --       Index_t n0si2 = elemToNode[0];
-   --       Index_t n1si2 = elemToNode[1];
-   --       Index_t n2si2 = elemToNode[2];
-   --       Index_t n3si2 = elemToNode[3];
-   --       Index_t n4si2 = elemToNode[4];
-   --       Index_t n5si2 = elemToNode[5];
-   --       Index_t n6si2 = elemToNode[6];
-   --       Index_t n7si2 = elemToNode[7];
-
-   --       xd1[0] = domain.xd(n0si2);
-   --       xd1[1] = domain.xd(n1si2);
-   --       xd1[2] = domain.xd(n2si2);
-   --       xd1[3] = domain.xd(n3si2);
-   --       xd1[4] = domain.xd(n4si2);
-   --       xd1[5] = domain.xd(n5si2);
-   --       xd1[6] = domain.xd(n6si2);
-   --       xd1[7] = domain.xd(n7si2);
-
-   --       yd1[0] = domain.yd(n0si2);
-   --       yd1[1] = domain.yd(n1si2);
-   --       yd1[2] = domain.yd(n2si2);
-   --       yd1[3] = domain.yd(n3si2);
-   --       yd1[4] = domain.yd(n4si2);
-   --       yd1[5] = domain.yd(n5si2);
-   --       yd1[6] = domain.yd(n6si2);
-   --       yd1[7] = domain.yd(n7si2);
-
-   --       zd1[0] = domain.zd(n0si2);
-   --       zd1[1] = domain.zd(n1si2);
-   --       zd1[2] = domain.zd(n2si2);
-   --       zd1[3] = domain.zd(n3si2);
-   --       zd1[4] = domain.zd(n4si2);
-   --       zd1[5] = domain.zd(n5si2);
-   --       zd1[6] = domain.zd(n6si2);
-   --       zd1[7] = domain.zd(n7si2);
-
-   --       coefficient = - hourg * Real_t(0.01) * ss1 * mass1 / volume13;
-
-   --       CalcElemFBHourglassForce(xd1,yd1,zd1,
-   --                       hourgam,
-   --                       coefficient, hgfx, hgfy, hgfz);
-
-   --       // With the threaded version, we write into local arrays per elem
-   --       // so we don't have to worry about race conditions
-   --       if (numthreads > 1) {
-   --          fx_local = &fx_elem[i3] ;
-   --          fx_local[0] = hgfx[0];
-   --          fx_local[1] = hgfx[1];
-   --          fx_local[2] = hgfx[2];
-   --          fx_local[3] = hgfx[3];
-   --          fx_local[4] = hgfx[4];
-   --          fx_local[5] = hgfx[5];
-   --          fx_local[6] = hgfx[6];
-   --          fx_local[7] = hgfx[7];
-
-   --          fy_local = &fy_elem[i3] ;
-   --          fy_local[0] = hgfy[0];
-   --          fy_local[1] = hgfy[1];
-   --          fy_local[2] = hgfy[2];
-   --          fy_local[3] = hgfy[3];
-   --          fy_local[4] = hgfy[4];
-   --          fy_local[5] = hgfy[5];
-   --          fy_local[6] = hgfy[6];
-   --          fy_local[7] = hgfy[7];
-
-   --          fz_local = &fz_elem[i3] ;
-   --          fz_local[0] = hgfz[0];
-   --          fz_local[1] = hgfz[1];
-   --          fz_local[2] = hgfz[2];
-   --          fz_local[3] = hgfz[3];
-   --          fz_local[4] = hgfz[4];
-   --          fz_local[5] = hgfz[5];
-   --          fz_local[6] = hgfz[6];
-   --          fz_local[7] = hgfz[7];
-   --       }
-   --       else {
-   --          domain.fx(n0si2) += hgfx[0];
-   --          domain.fy(n0si2) += hgfy[0];
-   --          domain.fz(n0si2) += hgfz[0];
-
-   --          domain.fx(n1si2) += hgfx[1];
-   --          domain.fy(n1si2) += hgfy[1];
-   --          domain.fz(n1si2) += hgfz[1];
-
-   --          domain.fx(n2si2) += hgfx[2];
-   --          domain.fy(n2si2) += hgfy[2];
-   --          domain.fz(n2si2) += hgfz[2];
-
-   --          domain.fx(n3si2) += hgfx[3];
-   --          domain.fy(n3si2) += hgfy[3];
-   --          domain.fz(n3si2) += hgfz[3];
-
-   --          domain.fx(n4si2) += hgfx[4];
-   --          domain.fy(n4si2) += hgfy[4];
-   --          domain.fz(n4si2) += hgfz[4];
-
-   --          domain.fx(n5si2) += hgfx[5];
-   --          domain.fy(n5si2) += hgfy[5];
-   --          domain.fz(n5si2) += hgfz[5];
-
-   --          domain.fx(n6si2) += hgfx[6];
-   --          domain.fy(n6si2) += hgfy[6];
-   --          domain.fz(n6si2) += hgfz[6];
-
-   --          domain.fx(n7si2) += hgfx[7];
-   --          domain.fy(n7si2) += hgfy[7];
-   --          domain.fz(n7si2) += hgfz[7];
-   --       }
-   --    }
-
-   --    if (numthreads > 1) {
-   --      // Collect the data from the local arrays into the final force arrays
-   -- #pragma omp parallel for firstprivate(numNode)
-   --       for( Index_t gnode=0 ; gnode<numNode ; ++gnode )
-   --       {
-   --          Index_t count = domain.nodeElemCount(gnode) ;
-   --          Index_t *cornerList = domain.nodeElemCornerList(gnode) ;
-   --          Real_t fx_tmp = Real_t(0.0) ;
-   --          Real_t fy_tmp = Real_t(0.0) ;
-   --          Real_t fz_tmp = Real_t(0.0) ;
-   --          for (Index_t i=0 ; i < count ; ++i) {
-   --             Index_t elem = cornerList[i] ;
-   --             fx_tmp += fx_elem[elem] ;
-   --             fy_tmp += fy_elem[elem] ;
-   --             fz_tmp += fz_elem[elem] ;
-   --          }
-   --          domain.fx(gnode) += fx_tmp ;
-   --          domain.fy(gnode) += fy_tmp ;
-   --          domain.fz(gnode) += fz_tmp ;
-   --       }
-   --       Release(&fz_elem) ;
-   --       Release(&fy_elem) ;
-   --       Release(&fx_elem) ;
-   --    }
-   -- }
-
-   -- /******************************************/
+   --- /******************************************/
 
    --x static inline
    --x void CalcHourglassControlForElems(Domain& domain,
@@ -3339,12 +3358,12 @@ package body LULESH is
             dtf     : Time_Span := Time_Span_Last;
             ss      : constant Velocity :=
               Domain.elements (element).Sound_Speed;
-            vdov    : constant Compression_Relative :=
+            vdov    : constant VDOV_Type :=
               Domain.Elements (element).Volume_Derivative_Over_Volume;
             arealg  : constant Length :=
               Domain.Elements (element).Characteristic_Length;
          begin
-            if vdov < Compression_Relative (0.0) then
+            if vdov < VDOV_Type (0.0) then
                dtf := Arealg / SQRT
                  (ss ** 2 +
                     qqc2 * Arealg ** 2 * Vdov ** 2);
@@ -3358,7 +3377,7 @@ package body LULESH is
             --x             }
             --x          }
             --x       }
-            if vdov /= Compression_Relative (0.0) and then dtcourant_tmp > dtf then
+            if vdov /= VDOV_Type (0.0) and then dtcourant_tmp > dtf then
                dtcourant_tmp := dtf;
                courant_elem  := element;
             end if;
@@ -3453,13 +3472,13 @@ package body LULESH is
          declare
             element : constant Element_Index :=
               domain.regions(region).elements(region_element_index);
-            vdov    : constant Compression_Relative :=
+            vdov    : constant VDOV_Type :=
               domain.elements(element).volume_derivative_over_volume;
          begin
-            if vdov /= Compression_Relative (0.0) then
+            if vdov /= VDOV_Type (0.0) then
                declare
                   --- dvovmax/vdov=(dv/vmax)/(vd/v)=(dv*v)/(vmax*vd)=dv/vd
-                  Vdov_A : constant Compression_Relative := (abs (Vdov)+Compression_Relative (1.0e-20));
+                  Vdov_A : constant VDOV_Type := (abs (Vdov)+VDOV_Type (1.0e-20));
                   dtdvov : constant Time_Span := Time_Span (
                     domain.parameters.dvovmax / Vdov_A);
                begin
